@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "basePath": "/assets/samples",
+  "note": "Sample placeholders for offline MVP. Replace basePath / samples with a real Open Kit passed/ folder later.",
+  "assets": [
+    { "id": "tile-grass", "name": "Grass", "category": "tiles", "file": "tile-grass.png" },
+    { "id": "tile-stone", "name": "Stone", "category": "tiles", "file": "tile-stone.png" },
+    { "id": "tile-water", "name": "Water", "category": "tiles", "file": "tile-water.png" },
+    { "id": "tile-dirt", "name": "Dirt", "category": "tiles", "file": "tile-dirt.png" },
+    { "id": "prop-crate", "name": "Crate", "category": "props", "file": "prop-crate.png" },
+    { "id": "prop-barrel", "name": "Barrel", "category": "props", "file": "prop-barrel.png" },
+    { "id": "prop-tree", "name": "Tree", "category": "props", "file": "prop-tree.png" },
+    { "id": "prop-rock", "name": "Rock", "category": "props", "file": "prop-rock.png" },
+    { "id": "token-guard", "name": "Guard", "category": "tokens", "file": "token-guard.png" },
+    { "id": "token-mage", "name": "Mage", "category": "tokens", "file": "token-mage.png" },
+    { "id": "token-rogue", "name": "Rogue", "category": "tokens", "file": "token-rogue.png" },
+    { "id": "token-cleric", "name": "Cleric", "category": "tokens", "file": "token-cleric.png" },
+    { "id": "monster-goblin", "name": "Goblin", "category": "monsters", "file": "monster-goblin.png" },
+    { "id": "monster-orc", "name": "Orc", "category": "monsters", "file": "monster-orc.png" },
+    { "id": "monster-dragon", "name": "Dragon", "category": "monsters", "file": "monster-dragon.png" },
+    { "id": "monster-skeleton", "name": "Skeleton", "category": "monsters", "file": "monster-skeleton.png" }
+  ]
+}
