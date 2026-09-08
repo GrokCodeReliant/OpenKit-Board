@@ -9,9 +9,8 @@ import {
   pixelToAxial,
 } from '../hex'
 
-const MAP_RADIUS = 8
-
 interface HexBoardProps {
+  mapRadius: number
   assetsById: Map<string, AssetDef>
   pieces: PlacedPiece[]
   selectedPieceId: string | null
@@ -25,6 +24,7 @@ interface HexBoardProps {
 }
 
 export function HexBoard({
+  mapRadius,
   assetsById,
   pieces,
   selectedPieceId,
@@ -49,7 +49,16 @@ export function HexBoard({
     pieceId?: string
   } | null>(null)
 
-  const cells = useMemo(() => generateHexMap(MAP_RADIUS), [])
+  const cells = useMemo(() => generateHexMap(mapRadius), [mapRadius])
+  const validKeys = useMemo(
+    () => new Set(cells.map((c) => hexKey(c.q, c.r))),
+    [cells],
+  )
+
+  const isOnMap = useCallback(
+    (q: number, r: number) => validKeys.has(hexKey(q, r)),
+    [validKeys],
+  )
 
   // Center pan on first layout
   useEffect(() => {
@@ -115,6 +124,20 @@ export function HexBoard({
     if (e.button !== 0) return
 
     const hex = hexAtClient(e.clientX, e.clientY)
+    if (!isOnMap(hex.q, hex.r)) {
+      onSelectPiece(null)
+      dragRef.current = {
+        mode: 'pan',
+        startX: e.clientX,
+        startY: e.clientY,
+        panX: pan.x,
+        panY: pan.y,
+      }
+      setDragging(true)
+      ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+      return
+    }
+
     const piece = pieceAtHex(hex.q, hex.r)
 
     if (selectedAssetId) {
@@ -152,7 +175,7 @@ export function HexBoard({
 
   const onPointerMove = (e: React.PointerEvent) => {
     const hex = hexAtClient(e.clientX, e.clientY)
-    onHoverHex(hex)
+    onHoverHex(isOnMap(hex.q, hex.r) ? hex : null)
 
     const d = dragRef.current
     if (!d) return
@@ -164,7 +187,7 @@ export function HexBoard({
       })
     } else if (d.mode === 'piece' && d.pieceId) {
       // Live preview via hover; commit on up
-      onHoverHex(hex)
+      onHoverHex(isOnMap(hex.q, hex.r) ? hex : null)
     }
   }
 
@@ -172,7 +195,9 @@ export function HexBoard({
     const d = dragRef.current
     if (d?.mode === 'piece' && d.pieceId) {
       const hex = hexAtClient(e.clientX, e.clientY)
-      onMovePiece(d.pieceId, hex.q, hex.r)
+      if (isOnMap(hex.q, hex.r)) {
+        onMovePiece(d.pieceId, hex.q, hex.r)
+      }
     }
     dragRef.current = null
     setDragging(false)
@@ -181,7 +206,8 @@ export function HexBoard({
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
-    onHoverHex(hexAtClient(e.clientX, e.clientY))
+    const hex = hexAtClient(e.clientX, e.clientY)
+    onHoverHex(isOnMap(hex.q, hex.r) ? hex : null)
   }
 
   const onDrop = (e: React.DragEvent) => {
@@ -191,6 +217,7 @@ export function HexBoard({
       e.dataTransfer.getData('text/plain')
     if (!assetId) return
     const hex = hexAtClient(e.clientX, e.clientY)
+    if (!isOnMap(hex.q, hex.r)) return
     onDropAsset(assetId, hex.q, hex.r)
   }
 
@@ -263,7 +290,7 @@ export function HexBoard({
           })}
 
           {/* Ghost for palette selection */}
-          {selectedAssetId && hoverHex && (
+          {selectedAssetId && hoverHex && isOnMap(hoverHex.q, hoverHex.r) && (
             <Ghost
               asset={assetsById.get(selectedAssetId)}
               q={hoverHex.q}

@@ -29,6 +29,7 @@ npm run preview
 - Select placed pieces, drag to move; Delete / Backspace removes
 - Tiles render as a ground layer under props / tokens / monsters
 - Offline sample PNGs under public/assets/samples/ plus manifest.json
+- DM can set board radius (3–40); large maps warn about performance
 
 ## Sample assets
 

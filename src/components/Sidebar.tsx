@@ -1,11 +1,21 @@
 import type { AssetCategory, AssetDef } from '../types'
 import { CATEGORIES } from '../types'
 
+const MIN_RADIUS = 3
+const MAX_RADIUS = 40
+
+/** Hexagon cell count for axial radius r: 3*r*(r+1)+1 */
+function hexCount(radius: number): number {
+  return 3 * radius * (radius + 1) + 1
+}
+
 interface SidebarProps {
   assets: AssetDef[]
   category: AssetCategory
   search: string
   selectedAssetId: string | null
+  mapRadius: number
+  onMapRadiusChange: (n: number) => void
   onCategoryChange: (c: AssetCategory) => void
   onSearchChange: (s: string) => void
   onSelectAsset: (id: string | null) => void
@@ -17,6 +27,8 @@ export function Sidebar({
   category,
   search,
   selectedAssetId,
+  mapRadius,
+  onMapRadiusChange,
   onCategoryChange,
   onSearchChange,
   onSelectAsset,
@@ -35,6 +47,31 @@ export function Sidebar({
         <h1>Open Kit Board</h1>
         <p className="sidebar-sub">Hex map · sample assets</p>
       </header>
+
+      <div className="board-size-control">
+        <label htmlFor="board-radius">Board size (radius)</label>
+        <div className="board-size-row">
+          <input
+            id="board-radius"
+            type="number"
+            min={MIN_RADIUS}
+            max={MAX_RADIUS}
+            value={mapRadius}
+            onChange={(e) => onMapRadiusChange(Number(e.target.value))}
+          />
+          <input
+            type="range"
+            min={MIN_RADIUS}
+            max={MAX_RADIUS}
+            value={mapRadius}
+            onChange={(e) => onMapRadiusChange(Number(e.target.value))}
+            aria-label="Board size radius slider"
+          />
+        </div>
+        <p className="board-size-meta">
+          ~{hexCount(mapRadius)} hexes (3×r×(r+1)+1)
+        </p>
+      </div>
 
       <nav className="category-tabs" aria-label="Asset categories">
         {CATEGORIES.map((c) => (
