@@ -9,6 +9,8 @@ import { NewBoardButton } from './components/NewBoardButton'
 import { SeatPads } from './components/SeatPads'
 import { RoomBackdrop } from './components/RoomBackdrop'
 import { RulesPackPanel } from './components/RulesPackPanel'
+import { PieceSheetPanel } from './components/PieceSheetPanel'
+import { LibraryTray } from './components/LibraryTray'
 import { Sidebar } from './components/Sidebar'
 import { generateHexMap, hexKey } from './hex'
 import type { Role } from './multiplayer/protocol'
@@ -20,6 +22,13 @@ import {
 } from './multiplayer/useRoom'
 import type { RulesPack } from './rulesPack'
 import { loadActiveRulesPack, saveActiveRulesPack } from './rulesPack'
+import type { PieceLibraryMap } from './pieceLibrary'
+import {
+  getLibraryEntry,
+  loadPieceLibrary,
+  removeLibraryEntry,
+  upsertLibraryEntry,
+} from './pieceLibrary'
 import type { RoomMode } from './roomShell'
 import { loadRoomMode, saveRoomMode } from './roomShell'
 import type { CameraView } from './cameraViews'
@@ -73,6 +82,11 @@ function App() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [localPieces, setLocalPieces] = useState<PlacedPiece[]>([])
   const [selectedPieceId, setSelectedPieceId] = useState<string | null>(null)
+  /** Asset whose index-card sheet is open (board select or library edit). */
+  const [sheetAssetId, setSheetAssetId] = useState<string | null>(null)
+  const [pieceLibrary, setPieceLibrary] = useState<PieceLibraryMap>(() =>
+    loadPieceLibrary(),
+  )
   const [hoverHex, setHoverHex] = useState<HexCoord | null>(null)
   const [localRadius, setLocalRadius] = useState(DEFAULT_RADIUS)
   const [urlJoin] = useState(() => parseRoomFromUrl())
@@ -158,6 +172,7 @@ function App() {
     setLocalPieces([])
     setSelectedPieceId(null)
     setSelectedAssetId(null)
+    setSheetAssetId(null)
     setLocalRadius(DEFAULT_RADIUS)
     setHoverHex(null)
     if (!shouldPlayEstablishingShot(true)) {
@@ -307,10 +322,57 @@ function App() {
     [validKeys, pieces, inRoom, room],
   )
 
-  const onSelectPiece = useCallback((id: string | null) => {
-    setSelectedPieceId(id)
-    if (id) setSelectedAssetId(null)
+  const onSelectPiece = useCallback(
+    (id: string | null) => {
+      setSelectedPieceId(id)
+      if (id) {
+        setSelectedAssetId(null)
+        const piece = pieces.find((p) => p.id === id)
+        if (piece) setSheetAssetId(piece.assetId)
+      }
+    },
+    [pieces],
+  )
+
+  const closePieceSheet = useCallback(() => {
+    setSheetAssetId(null)
   }, [])
+
+  const onPinLibraryEntry = useCallback(
+    (entry: {
+      assetId: string
+      displayName: string
+      notes: string
+      statsBlob: string
+      thumbSrc?: string
+    }) => {
+      setPieceLibrary((prev) => upsertLibraryEntry(prev, entry))
+    },
+    [],
+  )
+
+  const onUnpinLibraryEntry = useCallback((assetId: string) => {
+    setPieceLibrary((prev) => removeLibraryEntry(prev, assetId))
+  }, [])
+
+  const onOpenLibrarySheet = useCallback((assetId: string) => {
+    setSheetAssetId(assetId)
+    setSelectedPieceId(null)
+    setSelectedAssetId(null)
+  }, [])
+
+  const onPlaceFromLibrary = useCallback(
+    (assetId: string) => {
+      const asset = assetsById.get(assetId)
+      if (!asset) return
+      if (!canPlaceCategory(room.role, inRoom, asset.category)) return
+      setCategory(asset.category)
+      setSelectedAssetId(assetId)
+      setSelectedPieceId(null)
+      // Keep sheet open so notes stay visible while placing.
+    },
+    [assetsById, inRoom, room.role],
+  )
 
   const onMapRadiusChange = useCallback(
     (n: number) => {
@@ -330,6 +392,7 @@ function App() {
       if (e.key === 'Escape') {
         setSelectedAssetId(null)
         setSelectedPieceId(null)
+        setSheetAssetId(null)
         return
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -441,6 +504,7 @@ function App() {
           }
           setSelectedAssetId(id)
           setSelectedPieceId(null)
+          if (id) setSheetAssetId(null)
         }}
         onDragStart={(asset) => {
           if (!canPlaceCategory(room.role, inRoom, asset.category)) return
@@ -467,6 +531,28 @@ function App() {
             onAttach={onAttachRulesPack}
             onClear={onClearRulesPack}
           />
+        }
+        librarySlot={
+          <LibraryTray
+            library={pieceLibrary}
+            assetsById={assetsById}
+            role={inRoom ? room.role : null}
+            inRoom={inRoom}
+            onOpenSheet={onOpenLibrarySheet}
+            onPlace={onPlaceFromLibrary}
+          />
+        }
+        sheetSlot={
+          sheetAssetId ? (
+            <PieceSheetPanel
+              assetId={sheetAssetId}
+              asset={assetsById.get(sheetAssetId) ?? null}
+              libraryEntry={getLibraryEntry(pieceLibrary, sheetAssetId)}
+              onPin={onPinLibraryEntry}
+              onUnpin={onUnpinLibraryEntry}
+              onClose={closePieceSheet}
+            />
+          ) : null
         }
       />
       <main className={`main room-mode-${roomMode}`}>
