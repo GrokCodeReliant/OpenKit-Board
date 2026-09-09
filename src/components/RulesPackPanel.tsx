@@ -79,14 +79,40 @@ export function RulesPackPanel({
     setError(null)
     if (!file) return
     const lower = file.name.toLowerCase()
-    const okExt = lower.endsWith('.txt') || lower.endsWith('.md')
-    const okType =
+    const isPdf =
+      lower.endsWith('.pdf') || file.type === 'application/pdf'
+    const isTextExt = lower.endsWith('.txt') || lower.endsWith('.md')
+    const isTextType =
       !file.type ||
       file.type === 'text/plain' ||
       file.type === 'text/markdown' ||
       file.type === 'text/x-markdown'
-    if (!okExt || !okType) {
-      setError('Convert to .txt or .md first, or paste text.')
+
+    if (isPdf) {
+      // Never call file.text() on PDF — binary as text blows up the folio / WS.
+      // Lazy-load pdfjs so the main bundle stays lean until a PDF is chosen.
+      setBusy(true)
+      try {
+        const { extractTextFromPdf } = await import('../pdfTextExtract')
+        const text = await extractTextFromPdf(file)
+        setBody(text)
+        setFormatHint('text')
+        if (!title.trim()) setTitle(titleFromFilename(file.name))
+      } catch (e) {
+        const msg =
+          e instanceof Error
+            ? e.message
+            : 'Could not extract text from that PDF.'
+        setError(msg)
+        if (fileRef.current) fileRef.current.value = ''
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
+
+    if (!isTextExt || !isTextType) {
+      setError('Upload a .txt, .md, or .pdf file, or paste text.')
       if (fileRef.current) fileRef.current.value = ''
       return
     }
@@ -96,7 +122,9 @@ export function RulesPackPanel({
     }
     const text = await file.text()
     if (text.length > BODY_HARD_LIMIT) {
-      setError(`Text too large (max ${BODY_HARD_LIMIT.toLocaleString()} characters).`)
+      setError(
+        `Text too large for table sync (max ${BODY_HARD_LIMIT.toLocaleString()} characters). Shorten it and try again.`,
+      )
       return
     }
     setBody(text)
@@ -165,7 +193,7 @@ export function RulesPackPanel({
           />
         </label>
         <label className="rules-field">
-          <span>Body — paste or upload .txt / .md</span>
+          <span>Body — paste or upload .txt / .md / .pdf</span>
           <textarea
             rows={8}
             value={body}
@@ -181,15 +209,26 @@ export function RulesPackPanel({
           <input
             ref={fileRef}
             type="file"
-            accept=".txt,.md,text/plain,text/markdown"
-            aria-label="Upload rules file"
+            accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
+            aria-label="Upload rules file (.txt, .md, or .pdf)"
+            disabled={busy}
             onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
           />
+          {busy && (
+            <p className="rules-meta">Extracting text from PDF…</p>
+          )}
         </div>
         {softWarn && body.length <= BODY_HARD_LIMIT && (
           <p className="rules-warn">
             Large pack (~{Math.round(body.length / 1000)}k chars). Prefer a
             one-pager or summary if possible.
+          </p>
+        )}
+        {body.length > BODY_HARD_LIMIT && (
+          <p className="rules-error">
+            Text exceeds the table sync limit ({BODY_HARD_LIMIT.toLocaleString()}{' '}
+            characters). Shorten it before laying on the table — oversized packs
+            are rejected so the room WebSocket stays healthy.
           </p>
         )}
         <label className="rules-field">

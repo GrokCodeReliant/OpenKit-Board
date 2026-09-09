@@ -85,6 +85,17 @@ export async function createRulesPack(input: {
 }): Promise<RulesPack> {
   const now = new Date().toISOString()
   const body = input.body
+  if (body.length > BODY_HARD_LIMIT) {
+    throw new Error(
+      `Rules pack too large for table sync (max ${BODY_HARD_LIMIT.toLocaleString()} characters). Shorten the text and try again.`,
+    )
+  }
+  const byteLength = new TextEncoder().encode(body).byteLength
+  if (byteLength > BODY_HARD_LIMIT) {
+    throw new Error(
+      `Rules pack too large for table sync (max ~${BODY_HARD_LIMIT.toLocaleString()} bytes). Shorten the text and try again.`,
+    )
+  }
   return {
     id: crypto.randomUUID(),
     title: input.title.trim() || 'Untitled rules pack',
@@ -96,7 +107,7 @@ export async function createRulesPack(input: {
     rightsAffirmedAt: now,
     importedAt: now,
     importedBy: input.importedBy,
-    byteLength: new TextEncoder().encode(body).byteLength,
+    byteLength,
     contentHash: await sha256Hex(body),
   }
 }

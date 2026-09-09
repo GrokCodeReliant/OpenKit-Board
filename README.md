@@ -49,7 +49,7 @@ Optional: set `VITE_WS_URL` (e.g. `ws://localhost:3001`) to bypass the Vite prox
 
 ## Rules packs (Bite A–C)
 
-Import **your own** rules text for the session — paste or upload `.txt` / `.md`.
+Import **your own** rules text for the session — paste or upload `.txt` / `.md` / `.pdf` (PDF text is extracted in the browser; binary PDF is never synced).
 Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
 
 - Fields: title, license (free text), body, required rights acknowledgment
@@ -78,7 +78,7 @@ For a short CC-licensed one-pager to paste yourself while testing, see
 
 - **Presence:** table well + room/dim/void backdrop + material piece tray + top-down zoom presets + foley/ambience + establishing arrival + decorative seat pads + selected contact shadow
 - **Multiplayer rooms:** Host/Join with short code; DM + players sync mapRadius + pieces over WebSocket
-- **Rules pack:** Paste/upload .txt/.md + license + rights checkbox; solo localStorage; DM syncs room pack to players (read-only)
+- **Rules pack:** Paste/upload .txt/.md/.pdf + license + rights checkbox; PDF → text client-side; solo localStorage; DM syncs room pack to players (read-only)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story, no AI)
 - Pointy-top hex grid (axial coords) with pan + scroll zoom + top-down zoom presets
