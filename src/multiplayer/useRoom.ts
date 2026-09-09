@@ -29,6 +29,17 @@ export interface RoomSession {
   setRadius: (radius: number) => void
   place: (assetId: string, q: number, r: number, category: AssetCategory) => void
   move: (id: string, q: number, r: number) => void
+  updatePiece: (
+    id: string,
+    patch: {
+      rotationDeg?: number
+      scaleX?: number
+      scaleY?: number
+      offsetX?: number
+      offsetY?: number
+      lockedToCell?: boolean
+    },
+  ) => void
   deletePiece: (id: string) => void
   setRulesPack: (pack: RulesPack | null) => void
 }
@@ -292,6 +303,21 @@ export function useRoom(autoJoin?: { code: string; role: Role } | null): RoomSes
     [connectAndSend],
   )
 
+  const updatePiece = useCallback(
+    (
+      id: string,
+      patch: {
+        rotationDeg?: number
+        scaleX?: number
+        scaleY?: number
+        offsetX?: number
+        offsetY?: number
+        lockedToCell?: boolean
+      },
+    ) => connectAndSend({ type: 'update', id, ...patch }),
+    [connectAndSend],
+  )
+
   const deletePiece = useCallback(
     (id: string) => connectAndSend({ type: 'delete', id }),
     [connectAndSend],
@@ -349,6 +375,7 @@ export function useRoom(autoJoin?: { code: string; role: Role } | null): RoomSes
     setRadius,
     place,
     move,
+    updatePiece,
     deletePiece,
     setRulesPack,
   }

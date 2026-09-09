@@ -45,6 +45,34 @@ export interface HexCoord {
   r: number
 }
 
+/** Visual transform for a placed piece (cell-relative). */
+export interface PieceTransform {
+  /** Degrees clockwise around the piece center. */
+  rotationDeg: number
+  /** Width multiplier vs base cell fill (1 = one cell). */
+  scaleX: number
+  /** Height multiplier vs base cell fill (1 = one cell). */
+  scaleY: number
+  /** Image nudge in cell units (1 = one cell width). */
+  offsetX: number
+  /** Image nudge in cell units (1 = one cell height). */
+  offsetY: number
+  /**
+   * When true, piece stays owned by its grid cell; body-drag nudges the image
+   * (offset) instead of changing cells. Scale/rotate still apply either way.
+   */
+  lockedToCell: boolean
+}
+
+export const DEFAULT_PIECE_TRANSFORM: PieceTransform = {
+  rotationDeg: 0,
+  scaleX: 1,
+  scaleY: 1,
+  offsetX: 0,
+  offsetY: 0,
+  lockedToCell: true,
+}
+
 export interface PlacedPiece {
   id: string
   assetId: string
@@ -56,6 +84,25 @@ export interface PlacedPiece {
   ownerId?: string
   /** Asset category at place-time (server permission checks). */
   category?: AssetCategory
+  /** Visual edit fields — omit ⇒ defaults (legacy room state OK). */
+  rotationDeg?: number
+  scaleX?: number
+  scaleY?: number
+  offsetX?: number
+  offsetY?: number
+  lockedToCell?: boolean
+}
+
+/** Resolve transform with sensible defaults for older pieces. */
+export function pieceTransform(p: PlacedPiece): PieceTransform {
+  return {
+    rotationDeg: Number.isFinite(p.rotationDeg) ? (p.rotationDeg as number) : 0,
+    scaleX: Number.isFinite(p.scaleX) && (p.scaleX as number) > 0 ? (p.scaleX as number) : 1,
+    scaleY: Number.isFinite(p.scaleY) && (p.scaleY as number) > 0 ? (p.scaleY as number) : 1,
+    offsetX: Number.isFinite(p.offsetX) ? (p.offsetX as number) : 0,
+    offsetY: Number.isFinite(p.offsetY) ? (p.offsetY as number) : 0,
+    lockedToCell: p.lockedToCell !== false,
+  }
 }
 
 export const CATEGORIES: { id: AssetCategory; label: string }[] = [

@@ -45,8 +45,8 @@ import {
   markEstablishingShotSeen,
   shouldPlayEstablishingShot,
 } from './establishingShot'
-import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PlacedPiece } from './types'
-import { layerForCategory } from './types'
+import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PieceTransform, PlacedPiece } from './types'
+import { DEFAULT_PIECE_TRANSFORM, layerForCategory } from './types'
 import './App.css'
 
 let nextPieceId = 1
@@ -280,6 +280,7 @@ function App() {
           r,
           layer,
           category: asset.category,
+          ...DEFAULT_PIECE_TRANSFORM,
         }
         return [...next, piece]
       })
@@ -323,6 +324,23 @@ function App() {
       })
     },
     [validKeys, pieces, inRoom, room],
+  )
+
+  const onUpdatePiece = useCallback(
+    (id: string, patch: Partial<PieceTransform>) => {
+      const target = pieces.find((p) => p.id === id)
+      if (!canControlPiece(room.role, inRoom, room.clientId, target)) return
+
+      if (inRoom) {
+        room.updatePiece(id, patch)
+        return
+      }
+
+      setLocalPieces((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+      )
+    },
+    [pieces, inRoom, room],
   )
 
   const focusSheet = useCallback((assetId: string) => {
@@ -633,6 +651,7 @@ function App() {
                   onPlaceAt={onPlaceAt}
                   onSelectPiece={onSelectPiece}
                   onMovePiece={onMovePiece}
+                  onUpdatePiece={onUpdatePiece}
                   onDropAsset={placeAsset}
                   cameraView={cameraView}
                   onZoomChange={onHexZoomChange}
@@ -648,6 +667,21 @@ function App() {
             const asset = assetsById.get(assetId) ?? null
             const title =
               entry?.displayName || asset?.name || 'Index card'
+            const selectedPlaced =
+              selectedPieceId
+                ? (pieces.find(
+                    (p) =>
+                      p.id === selectedPieceId && p.assetId === assetId,
+                  ) ?? null)
+                : null
+            const canEdit =
+              !!selectedPlaced &&
+              canControlPiece(
+                room.role,
+                inRoom,
+                room.clientId,
+                selectedPlaced,
+              )
             return (
               <FloatingWindow
                 key={assetId}
@@ -657,7 +691,7 @@ function App() {
                 initialX={48 + (i % 4) * 36}
                 initialY={56 + (i % 4) * 28}
                 width={360}
-                maxHeight={560}
+                maxHeight={620}
                 zIndex={sheetZ[assetId] ?? 20 + i}
                 onFocus={() => focusSheet(assetId)}
                 onClose={() => closePieceSheet(assetId)}
@@ -666,6 +700,13 @@ function App() {
                   assetId={assetId}
                   asset={asset}
                   libraryEntry={entry}
+                  placedPiece={selectedPlaced}
+                  canEditTransform={canEdit}
+                  onTransformChange={
+                    selectedPlaced
+                      ? (patch) => onUpdatePiece(selectedPlaced.id, patch)
+                      : undefined
+                  }
                   onPin={onPinLibraryEntry}
                   onUnpin={onUnpinLibraryEntry}
                   onClose={() => closePieceSheet(assetId)}

@@ -33,6 +33,12 @@ const RULES_PACK_HARD_LIMIT = 500_000
  *   layer: 'ground' | 'object',
  *   ownerId: string,
  *   category: AssetCategory,
+ *   rotationDeg?: number,
+ *   scaleX?: number,
+ *   scaleY?: number,
+ *   offsetX?: number,
+ *   offsetY?: number,
+ *   lockedToCell?: boolean,
  * }} Piece
  */
 
@@ -146,6 +152,39 @@ function canMutatePiece(role, clientId, piece) {
   return piece.ownerId === clientId
 }
 
+
+
+/**
+ * Clamp / normalize optional visual transform fields from a client update/place.
+ * Stored opaquely on the piece (legacy pieces omit fields ⇒ client defaults).
+ * @param {Record<string, unknown>} src
+ * @returns {Partial<Piece>}
+ */
+function pickTransform(src) {
+  /** @type {Partial<Piece>} */
+  const out = {}
+  if (typeof src.rotationDeg === 'number' && Number.isFinite(src.rotationDeg)) {
+    // Keep a sane range for JSON noise, wrap not required for MVP.
+    out.rotationDeg = ((src.rotationDeg % 360) + 360) % 360
+    if (out.rotationDeg > 180) out.rotationDeg -= 360
+  }
+  if (typeof src.scaleX === 'number' && Number.isFinite(src.scaleX) && src.scaleX > 0) {
+    out.scaleX = Math.min(8, Math.max(0.05, src.scaleX))
+  }
+  if (typeof src.scaleY === 'number' && Number.isFinite(src.scaleY) && src.scaleY > 0) {
+    out.scaleY = Math.min(8, Math.max(0.05, src.scaleY))
+  }
+  if (typeof src.offsetX === 'number' && Number.isFinite(src.offsetX)) {
+    out.offsetX = Math.min(8, Math.max(-8, src.offsetX))
+  }
+  if (typeof src.offsetY === 'number' && Number.isFinite(src.offsetY)) {
+    out.offsetY = Math.min(8, Math.max(-8, src.offsetY))
+  }
+  if (typeof src.lockedToCell === 'boolean') {
+    out.lockedToCell = src.lockedToCell
+  }
+  return out
+}
 
 /**
  * @param {unknown} pack
@@ -342,6 +381,13 @@ wss.on('connection', (ws) => {
         layer,
         ownerId: clientId,
         category,
+        rotationDeg: 0,
+        scaleX: 1,
+        scaleY: 1,
+        offsetX: 0,
+        offsetY: 0,
+        lockedToCell: true,
+        ...pickTransform(msg),
       }
       room.pieces.push(piece)
       broadcast(room, { type: 'state', state: roomState(room) })
@@ -374,6 +420,28 @@ wss.on('connection', (ws) => {
           !(p.q === q && p.r === r && p.layer === piece.layer),
       )
       room.pieces.push({ ...piece, q, r })
+      broadcast(room, { type: 'state', state: roomState(room) })
+      return
+    }
+
+    if (type === 'update') {
+      const id = String(msg.id || '')
+      const piece = room.pieces.find((p) => p.id === id)
+      if (!canMutatePiece(meta.role, clientId, piece)) {
+        send(ws, {
+          type: 'error',
+          message: 'Cannot update that piece',
+        })
+        return
+      }
+      const patch = pickTransform(msg)
+      if (Object.keys(patch).length === 0) {
+        send(ws, { type: 'error', message: 'Invalid update payload' })
+        return
+      }
+      room.pieces = room.pieces.map((p) =>
+        p.id === id ? { ...p, ...patch } : p,
+      )
       broadcast(room, { type: 'state', state: roomState(room) })
       return
     }
