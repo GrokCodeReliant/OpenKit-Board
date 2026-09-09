@@ -383,22 +383,28 @@ function App() {
             scenes.
           </div>
         )}
-        <HexBoard
-          mapRadius={mapRadius}
-          assetsById={assetsById}
-          pieces={pieces}
-          selectedPieceId={selectedPieceId}
-          selectedAssetId={selectedAssetId}
-          hoverHex={hoverHex}
-          clientId={room.clientId}
-          role={inRoom ? room.role : null}
-          inRoom={inRoom}
-          onHoverHex={setHoverHex}
-          onPlaceAt={onPlaceAt}
-          onSelectPiece={onSelectPiece}
-          onMovePiece={onMovePiece}
-          onDropAsset={placeAsset}
-        />
+        <div className="table-stage">
+          <div className="table-object" aria-label="Game table">
+            <div className="table-well">
+              <HexBoard
+                mapRadius={mapRadius}
+                assetsById={assetsById}
+                pieces={pieces}
+                selectedPieceId={selectedPieceId}
+                selectedAssetId={selectedAssetId}
+                hoverHex={hoverHex}
+                clientId={room.clientId}
+                role={inRoom ? room.role : null}
+                inRoom={inRoom}
+                onHoverHex={setHoverHex}
+                onPlaceAt={onPlaceAt}
+                onSelectPiece={onSelectPiece}
+                onMovePiece={onMovePiece}
+                onDropAsset={placeAsset}
+              />
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   )
