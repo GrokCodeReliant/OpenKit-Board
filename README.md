@@ -61,8 +61,16 @@ Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
 For a short CC-licensed one-pager to paste yourself while testing, see
 [Lasers & Feelings](https://johnharper.itch.io/lasers-feelings) (CC BY 4.0) — download/copy from the author; do not commit that text here.
 
+## Presence (Bite 1–2)
+
+- **Table well:** hex board sits in a recessed felt well on a wood table object (drop shadow + rim)
+- **Room shell:** original CSS hobby-room backdrop (warm wall / soft shelves / lamp + window glow — not a Demeo clone)
+- Heavy vignette keeps focus on the table
+- Toggle **Room / Dim room / Void** (persists in `localStorage`)
+
 ## What works
 
+- **Presence:** table well + room/dim/void backdrop toggle
 - **Multiplayer rooms:** Host/Join with short code; DM + players sync mapRadius + pieces over WebSocket
 - **Rules pack:** Paste/upload .txt/.md + license + rights checkbox; solo localStorage; DM syncs room pack to players (read-only)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
