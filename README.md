@@ -61,22 +61,23 @@ Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
 For a short CC-licensed one-pager to paste yourself while testing, see
 [Lasers & Feelings](https://johnharper.itch.io/lasers-feelings) (CC BY 4.0) — download/copy from the author; do not commit that text here.
 
-## Presence (Bite 1–3)
+## Presence (Bite 1–4)
 
 - **Table well:** hex board sits in a recessed felt well on a wood table object (drop shadow + rim)
 - **Room shell:** original CSS hobby-room backdrop (warm wall / soft shelves / lamp + window glow — not a Demeo clone)
 - Heavy vignette keeps focus on the table
 - Toggle **Room / Dim room / Void** (persists in `localStorage`)
 - **Material tray:** sidebar restyled as a wood-edged felt piece tray with paper tabs/labels (categories, filters, rooms, rules folio, radius unchanged)
+- **Camera grammar:** preset views **Top-down / Slight tilt (default) / Close** with optional subtle CSS `rotateX`; pan + wheel zoom kept; zoom/scale limits leave a strip of table rim in frame (persists in `localStorage`)
 
 ## What works
 
-- **Presence:** table well + room/dim/void backdrop + material piece tray
+- **Presence:** table well + room/dim/void backdrop + material piece tray + camera view presets
 - **Multiplayer rooms:** Host/Join with short code; DM + players sync mapRadius + pieces over WebSocket
 - **Rules pack:** Paste/upload .txt/.md + license + rights checkbox; solo localStorage; DM syncs room pack to players (read-only)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story, no AI)
-- Pointy-top hex grid (axial coords) with pan + scroll zoom
+- Pointy-top hex grid (axial coords) with pan + scroll zoom + camera presets
 - Sidebar categories: Tiles | Props | Tokens | Monsters
 - Filter assets by name; thumbnail palette
 - Drag an asset onto a hex, or click an asset then click a hex
