@@ -36,7 +36,10 @@ export interface Manifest {
   }>
 }
 
-/** Axial hex coordinates (pointy-top). */
+/**
+ * Square grid cell (column / row).
+ * Fields stay `q`,`r` for WS compatibility — they mean square axes, not axial hex.
+ */
 export interface HexCoord {
   q: number
   r: number

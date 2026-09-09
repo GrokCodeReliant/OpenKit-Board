@@ -3,17 +3,17 @@ import type { Role } from '../multiplayer/protocol'
 import { canControlPiece } from '../multiplayer/useRoom'
 import type { AssetDef, HexCoord, PlacedPiece } from '../types'
 import {
-  clampHexZoom,
+  clampBoardZoom,
   VIEW_PRESETS,
   type CameraView,
 } from '../cameraViews'
 import {
-  HEX_SIZE,
-  axialToPixel,
-  generateHexMap,
-  hexKey,
-  hexPath,
-  pixelToAxial,
+  CELL_SIZE,
+  cellKey,
+  generateSquareMap,
+  pixelToSquare,
+  squarePath,
+  squareToPixel,
 } from '../hex'
 
 interface HexBoardProps {
@@ -32,7 +32,7 @@ interface HexBoardProps {
   onMovePiece: (id: string, q: number, r: number) => void
   onDropAsset: (assetId: string, q: number, r: number) => void
   cameraView: CameraView
-  /** Optional live hex zoom for ambience crossfade (Bite 5). */
+  /** Optional live board zoom for ambience crossfade (Bite 5). */
   onZoomChange?: (zoom: number) => void
 }
 
@@ -59,10 +59,31 @@ export function HexBoard({
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(() => VIEW_PRESETS[cameraView].hexZoom)
   const [dragging, setDragging] = useState(false)
+  const [viewSize, setViewSize] = useState({ w: 0, h: 0 })
 
   useEffect(() => {
     onZoomChange?.(zoom)
   }, [zoom, onZoomChange])
+
+  // Track viewport so min zoom can fit the full board (incl. radius 40).
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const measure = () => {
+      const { width, height } = el.getBoundingClientRect()
+      setViewSize({ w: width, h: height })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Reclamp zoom when board size or viewport changes so full map stays reachable.
+  useEffect(() => {
+    if (viewSize.w <= 0 || viewSize.h <= 0) return
+    setZoom((z) => clampBoardZoom(z, mapRadius, viewSize.w, viewSize.h))
+  }, [mapRadius, viewSize.w, viewSize.h])
 
   const dragRef = useRef<{
     mode: 'pan' | 'piece'
@@ -73,14 +94,14 @@ export function HexBoard({
     pieceId?: string
   } | null>(null)
 
-  const cells = useMemo(() => generateHexMap(mapRadius), [mapRadius])
+  const cells = useMemo(() => generateSquareMap(mapRadius), [mapRadius])
   const validKeys = useMemo(
-    () => new Set(cells.map((c) => hexKey(c.q, c.r))),
+    () => new Set(cells.map((c) => cellKey(c.q, c.r))),
     [cells],
   )
 
   const isOnMap = useCallback(
-    (q: number, r: number) => validKeys.has(hexKey(q, r)),
+    (q: number, r: number) => validKeys.has(cellKey(q, r)),
     [validKeys],
   )
 
@@ -97,6 +118,11 @@ export function HexBoard({
     recenter()
   }, [recenter])
 
+  // Keep origin centered when radius jumps so the full map can be framed.
+  useEffect(() => {
+    recenter()
+  }, [mapRadius, recenter])
+
   const screenToWorld = useCallback(
     (clientX: number, clientY: number) => {
       const el = wrapRef.current
@@ -112,15 +138,15 @@ export function HexBoard({
     [pan, zoom],
   )
 
-  const hexAtClient = useCallback(
+  const cellAtClient = useCallback(
     (clientX: number, clientY: number): HexCoord => {
       const { x, y } = screenToWorld(clientX, clientY)
-      return pixelToAxial(x, y, HEX_SIZE)
+      return pixelToSquare(x, y, CELL_SIZE)
     },
     [screenToWorld],
   )
 
-  const pieceAtHex = useCallback(
+  const pieceAtCell = useCallback(
     (q: number, r: number): PlacedPiece | undefined => {
       // Prefer object layer over ground for picking
       const at = pieces.filter((p) => p.q === q && p.r === r)
@@ -131,8 +157,13 @@ export function HexBoard({
 
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault()
+    const el = wrapRef.current
+    const { width, height } = el?.getBoundingClientRect() ?? {
+      width: viewSize.w,
+      height: viewSize.h,
+    }
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
-    setZoom((z) => clampHexZoom(z * factor))
+    setZoom((z) => clampBoardZoom(z * factor, mapRadius, width, height))
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -152,8 +183,8 @@ export function HexBoard({
 
     if (e.button !== 0) return
 
-    const hex = hexAtClient(e.clientX, e.clientY)
-    if (!isOnMap(hex.q, hex.r)) {
+    const cell = cellAtClient(e.clientX, e.clientY)
+    if (!isOnMap(cell.q, cell.r)) {
       onSelectPiece(null)
       dragRef.current = {
         mode: 'pan',
@@ -167,10 +198,10 @@ export function HexBoard({
       return
     }
 
-    const piece = pieceAtHex(hex.q, hex.r)
+    const piece = pieceAtCell(cell.q, cell.r)
 
     if (selectedAssetId) {
-      onPlaceAt(hex.q, hex.r)
+      onPlaceAt(cell.q, cell.r)
       return
     }
 
@@ -192,7 +223,7 @@ export function HexBoard({
       return
     }
 
-    // Empty hex: start pan with left drag, clear selection
+    // Empty cell: start pan with left drag, clear selection
     onSelectPiece(null)
     dragRef.current = {
       mode: 'pan',
@@ -206,8 +237,8 @@ export function HexBoard({
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
-    const hex = hexAtClient(e.clientX, e.clientY)
-    onHoverHex(isOnMap(hex.q, hex.r) ? hex : null)
+    const cell = cellAtClient(e.clientX, e.clientY)
+    onHoverHex(isOnMap(cell.q, cell.r) ? cell : null)
 
     const d = dragRef.current
     if (!d) return
@@ -219,16 +250,16 @@ export function HexBoard({
       })
     } else if (d.mode === 'piece' && d.pieceId) {
       // Live preview via hover; commit on up
-      onHoverHex(isOnMap(hex.q, hex.r) ? hex : null)
+      onHoverHex(isOnMap(cell.q, cell.r) ? cell : null)
     }
   }
 
   const onPointerUp = (e: React.PointerEvent) => {
     const d = dragRef.current
     if (d?.mode === 'piece' && d.pieceId) {
-      const hex = hexAtClient(e.clientX, e.clientY)
-      if (isOnMap(hex.q, hex.r)) {
-        onMovePiece(d.pieceId, hex.q, hex.r)
+      const cell = cellAtClient(e.clientX, e.clientY)
+      if (isOnMap(cell.q, cell.r)) {
+        onMovePiece(d.pieceId, cell.q, cell.r)
       }
     }
     dragRef.current = null
@@ -238,8 +269,8 @@ export function HexBoard({
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
-    const hex = hexAtClient(e.clientX, e.clientY)
-    onHoverHex(isOnMap(hex.q, hex.r) ? hex : null)
+    const cell = cellAtClient(e.clientX, e.clientY)
+    onHoverHex(isOnMap(cell.q, cell.r) ? cell : null)
   }
 
   const onDrop = (e: React.DragEvent) => {
@@ -248,9 +279,9 @@ export function HexBoard({
       e.dataTransfer.getData('application/x-openkit-asset') ||
       e.dataTransfer.getData('text/plain')
     if (!assetId) return
-    const hex = hexAtClient(e.clientX, e.clientY)
-    if (!isOnMap(hex.q, hex.r)) return
-    onDropAsset(assetId, hex.q, hex.r)
+    const cell = cellAtClient(e.clientX, e.clientY)
+    if (!isOnMap(cell.q, cell.r)) return
+    onDropAsset(assetId, cell.q, cell.r)
   }
 
   // Sort for draw order: ground first, then objects; stable by id
@@ -262,12 +293,13 @@ export function HexBoard({
     })
   }, [pieces])
 
-  const hoverKey = hoverHex ? hexKey(hoverHex.q, hoverHex.r) : null
+  const hoverKey = hoverHex ? cellKey(hoverHex.q, hoverHex.r) : null
+  const half = CELL_SIZE / 2 - 0.5
 
   return (
     <div
       ref={wrapRef}
-      className={`hex-board ${dragging ? 'dragging' : ''}`}
+      className={`hex-board square-board ${dragging ? 'dragging' : ''}`}
       onWheel={onWheel}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -279,16 +311,25 @@ export function HexBoard({
     >
       <svg className="hex-svg" width="100%" height="100%">
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          {/* Grid */}
+          {/* Checkerboard grid */}
           {cells.map(({ q, r }) => {
-            const { x, y } = axialToPixel(q, r)
-            const key = hexKey(q, r)
+            const { x, y } = squareToPixel(q, r)
+            const key = cellKey(q, r)
             const isHover = hoverKey === key
+            const alt = ((q + r) & 1) === 0
+            const cls = [
+              'hex-cell',
+              'square-cell',
+              alt ? 'check-a' : 'check-b',
+              isHover ? 'hover' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')
             return (
               <path
                 key={key}
-                d={hexPath(x, y, HEX_SIZE - 0.5)}
-                className={isHover ? 'hex-cell hover' : 'hex-cell'}
+                d={squarePath(x, y, half)}
+                className={cls}
               />
             )
           })}
@@ -297,14 +338,16 @@ export function HexBoard({
           {sortedPieces.map((piece) => {
             const asset = assetsById.get(piece.assetId)
             if (!asset) return null
-            const { x, y } = axialToPixel(piece.q, piece.r)
+            const { x, y } = squareToPixel(piece.q, piece.r)
             const selected = piece.id === selectedPieceId
-            const size = piece.layer === 'ground' ? HEX_SIZE * 1.7 : HEX_SIZE * 1.35
+            // Ground tiles fill the square edge-to-edge; objects sit slightly inset
+            const size =
+              piece.layer === 'ground' ? CELL_SIZE * 0.98 : CELL_SIZE * 0.82
             return (
               <g key={piece.id} className={selected ? 'piece selected' : 'piece'}>
                 {selected && (
                   <path
-                    d={hexPath(x, y, HEX_SIZE - 1)}
+                    d={squarePath(x, y, CELL_SIZE / 2 - 1)}
                     className="piece-select-ring"
                   />
                 )}
@@ -362,11 +405,15 @@ function Ghost({
   r: number
 }) {
   if (!asset) return null
-  const { x, y } = axialToPixel(q, r)
-  const size = asset.category === 'tiles' ? HEX_SIZE * 1.7 : HEX_SIZE * 1.35
+  const { x, y } = squareToPixel(q, r)
+  const size =
+    asset.category === 'tiles' ? CELL_SIZE * 0.98 : CELL_SIZE * 0.82
   return (
     <g className="ghost" opacity={0.55}>
-      <path d={hexPath(x, y, HEX_SIZE - 1)} className="ghost-hex" />
+      <path
+        d={squarePath(x, y, CELL_SIZE / 2 - 1)}
+        className="ghost-hex ghost-square"
+      />
       <image
         href={asset.src}
         x={x - size / 2}

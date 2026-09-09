@@ -1,6 +1,8 @@
 import type { RulesPack } from '../rulesPack'
 import type { AssetCategory, PlacedPiece } from '../types'
 
+/** Piece `q`,`r` are square column/row axes (not axial hex). */
+
 export type Role = 'dm' | 'player'
 
 export interface RoomState {

@@ -335,7 +335,8 @@ export const boardAudio = {
     let zoomFactor = 0
     if (typeof hexZoom === 'number' && Number.isFinite(hexZoom)) {
       const span = HEX_ZOOM_MAX - HEX_ZOOM_MIN || 1
-      zoomFactor = (hexZoom - HEX_ZOOM_MIN) / span
+      // Fit-to-view may go below comfort min on large boards — clamp blend 0..1
+      zoomFactor = Math.min(1, Math.max(0, (hexZoom - HEX_ZOOM_MIN) / span))
     }
     // Prefer view bed, nudge with live scroll zoom
     this.setProximity(Math.min(1, base * 0.7 + zoomFactor * 0.55))

@@ -14,7 +14,7 @@ import { LibraryTray } from './components/LibraryTray'
 import { FloatingWindow } from './components/FloatingWindow'
 import { RulesFolioWindow } from './components/RulesFolioWindow'
 import { Sidebar } from './components/Sidebar'
-import { generateHexMap, hexKey } from './hex'
+import { generateSquareMap, cellKey, squareCount } from './hex'
 import type { Role } from './multiplayer/protocol'
 import {
   canChangeRadius,
@@ -54,11 +54,6 @@ let nextPieceId = 1
 const DEFAULT_RADIUS = 8
 const MIN_RADIUS = 3
 const MAX_RADIUS = 40
-
-/** Hexagon cell count for axial radius r: 3*r*(r+1)+1 */
-function hexCount(radius: number): number {
-  return 3 * radius * (radius + 1) + 1
-}
 
 function clampRadius(n: number): number {
   if (!Number.isFinite(n)) return DEFAULT_RADIUS
@@ -221,10 +216,10 @@ function App() {
       return
     }
     const valid = new Set(
-      generateHexMap(mapRadius).map((c) => hexKey(c.q, c.r)),
+      generateSquareMap(mapRadius).map((c) => cellKey(c.q, c.r)),
     )
     setLocalPieces((prev) => {
-      const next = prev.filter((p) => valid.has(hexKey(p.q, p.r)))
+      const next = prev.filter((p) => valid.has(cellKey(p.q, p.r)))
       return next.length === prev.length ? prev : next
     })
     setHoverHex(null)
@@ -252,12 +247,12 @@ function App() {
   }, [assets])
 
   const validKeys = useMemo(() => {
-    return new Set(generateHexMap(mapRadius).map((c) => hexKey(c.q, c.r)))
+    return new Set(generateSquareMap(mapRadius).map((c) => cellKey(c.q, c.r)))
   }, [mapRadius])
 
   const placeAsset = useCallback(
     (assetId: string, q: number, r: number) => {
-      if (!validKeys.has(hexKey(q, r))) return
+      if (!validKeys.has(cellKey(q, r))) return
       const asset = assetsById.get(assetId)
       if (!asset) return
       if (!canPlaceCategory(room.role, inRoom, asset.category)) return
@@ -296,7 +291,7 @@ function App() {
   const onPlaceAt = useCallback(
     (q: number, r: number) => {
       if (!selectedAssetId) return
-      if (!validKeys.has(hexKey(q, r))) return
+      if (!validKeys.has(cellKey(q, r))) return
       placeAsset(selectedAssetId, q, r)
     },
     [selectedAssetId, placeAsset, validKeys],
@@ -304,7 +299,7 @@ function App() {
 
   const onMovePiece = useCallback(
     (id: string, q: number, r: number) => {
-      if (!validKeys.has(hexKey(q, r))) return
+      if (!validKeys.has(cellKey(q, r))) return
       const moving = pieces.find((p) => p.id === id)
       if (!canControlPiece(room.role, inRoom, room.clientId, moving)) return
       if (moving && moving.q === q && moving.r === r) return
@@ -441,7 +436,7 @@ function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedPieceId, pieces, inRoom, room])
 
-  const cellCount = hexCount(mapRadius)
+  const cellCount = squareCount(mapRadius)
   const radiusEditable = canChangeRadius(room.role, inRoom)
 
   // Solo: localStorage. In a room: DM pushes to room state; players see remote pack.
@@ -597,7 +592,7 @@ function App() {
         {/* Soft solo: no red WebSocket banner for idle / brief flaps. */}
         {mapRadius >= 25 && (
           <div className="banner warn strong">
-            Very large board (radius {mapRadius}, ~{cellCount} hexes) — expect
+            Very large board (radius {mapRadius}, ~{cellCount} cells) — expect
             heavy lag. Prefer radius under 15 for play, especially camp scenes.
           </div>
         )}
