@@ -1,6 +1,6 @@
 /**
  * Open Kit Board — multiplayer room server (MVP).
- * In-memory rooms; WebSocket sync for mapRadius + pieces.
+ * In-memory rooms; WebSocket sync for mapRadius + pieces + rules pack.
  * Run: npm run server  (default port 3001)
  */
 import { createServer } from 'node:http'
@@ -17,6 +17,8 @@ const PORT = Number(process.env.PORT || 3001)
 const DEFAULT_RADIUS = 8
 const MIN_RADIUS = 3
 const MAX_RADIUS = 40
+/** Match client rulesPack BODY_HARD_LIMIT (UTF-8 bytes). */
+const RULES_PACK_HARD_LIMIT = 500_000
 
 /** @typedef {'dm' | 'player'} Role */
 /** @typedef {'tiles' | 'props' | 'tokens' | 'monsters'} AssetCategory */
@@ -35,9 +37,27 @@ const MAX_RADIUS = 40
 
 /**
  * @typedef {{
+ *   id: string,
+ *   title: string,
+ *   body: string,
+ *   format: 'text' | 'markdown',
+ *   license: string,
+ *   sourceUrl?: string,
+ *   attribution?: string,
+ *   rightsAffirmedAt: string,
+ *   importedAt: string,
+ *   importedBy: string,
+ *   byteLength: number,
+ *   contentHash: string,
+ * }} RulesPack
+ */
+
+/**
+ * @typedef {{
  *   code: string,
  *   mapRadius: number,
  *   pieces: Piece[],
+ *   rulesPack: RulesPack | null,
  *   clients: Map<import('ws').WebSocket, { id: string, role: Role }>,
  * }} Room
  */
@@ -68,7 +88,11 @@ function send(ws, msg) {
 }
 
 function roomState(room) {
-  return { mapRadius: room.mapRadius, pieces: room.pieces }
+  return {
+    mapRadius: room.mapRadius,
+    pieces: room.pieces,
+    rulesPack: room.rulesPack ?? null,
+  }
 }
 
 function broadcast(room, msg, except = null) {
@@ -121,6 +145,52 @@ function canMutatePiece(role, clientId, piece) {
   return piece.ownerId === clientId
 }
 
+
+/**
+ * @param {unknown} pack
+ * @returns {RulesPack | null | false} false = invalid
+ */
+function normalizeRulesPack(pack) {
+  if (pack === null) return null
+  if (!pack || typeof pack !== 'object') return false
+  const p = /** @type {Record<string, unknown>} */ (pack)
+  if (
+    typeof p.id !== 'string' ||
+    typeof p.title !== 'string' ||
+    typeof p.body !== 'string' ||
+    typeof p.license !== 'string' ||
+    (p.format !== 'text' && p.format !== 'markdown')
+  ) {
+    return false
+  }
+  const body = p.body
+  const byteLength =
+    typeof p.byteLength === 'number'
+      ? p.byteLength
+      : Buffer.byteLength(body, 'utf8')
+  if (byteLength > RULES_PACK_HARD_LIMIT || body.length > RULES_PACK_HARD_LIMIT) {
+    return false
+  }
+  return {
+    id: p.id,
+    title: p.title,
+    body,
+    format: p.format,
+    license: p.license,
+    sourceUrl: typeof p.sourceUrl === 'string' ? p.sourceUrl : undefined,
+    attribution: typeof p.attribution === 'string' ? p.attribution : undefined,
+    rightsAffirmedAt:
+      typeof p.rightsAffirmedAt === 'string'
+        ? p.rightsAffirmedAt
+        : new Date().toISOString(),
+    importedAt:
+      typeof p.importedAt === 'string' ? p.importedAt : new Date().toISOString(),
+    importedBy: typeof p.importedBy === 'string' ? p.importedBy : 'unknown',
+    byteLength,
+    contentHash: typeof p.contentHash === 'string' ? p.contentHash : '',
+  }
+}
+
 function createRoom() {
   let code = roomCode()
   while (rooms.has(code)) code = roomCode()
@@ -129,6 +199,7 @@ function createRoom() {
     code,
     mapRadius: DEFAULT_RADIUS,
     pieces: [],
+    rulesPack: null,
     clients: new Map(),
   }
   rooms.set(code, room)
@@ -313,7 +384,31 @@ wss.on('connection', (ws) => {
       return
     }
 
+    if (type === 'setRulesPack') {
+      if (meta.role !== 'dm') {
+        send(ws, {
+          type: 'error',
+          message: 'Only the DM can set the room rules pack',
+        })
+        return
+      }
+      const normalized = normalizeRulesPack(
+        msg.pack === undefined ? null : msg.pack,
+      )
+      if (normalized === false) {
+        send(ws, {
+          type: 'error',
+          message: 'Invalid rules pack (check fields and size limit)',
+        })
+        return
+      }
+      room.rulesPack = normalized
+      broadcast(room, { type: 'state', state: roomState(room) })
+      return
+    }
+
     send(ws, { type: 'error', message: `Unknown type: ${type}` })
+
   })
 
   ws.on('close', () => leaveRoom(ws))

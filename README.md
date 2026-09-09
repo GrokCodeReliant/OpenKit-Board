@@ -23,7 +23,7 @@ npm run preview
 
 ## Multiplayer rooms (MVP)
 
-Live sync of board radius + placed pieces over a small WebSocket server.
+Live sync of board radius + placed pieces + DM rules pack over a small WebSocket server.
 DM owns board/assets/terrain; players place/move/delete only their own tokens.
 No auth, no DB — rooms live in server memory.
 
@@ -47,15 +47,16 @@ Solo offline mode is unchanged when you are not in a room.
 
 Optional: set `VITE_WS_URL` (e.g. `ws://localhost:3001`) to bypass the Vite proxy.
 
-## Rules packs (Bite A)
+## Rules packs (Bite A–C)
 
 Import **your own** rules text for the session — paste or upload `.txt` / `.md`.
 Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
 
 - Fields: title, license (free text), body, required rights acknowledgment
-- Active pack is stored in browser `localStorage` (solo / this machine)
-- Sidebar shows **Active rules pack** (title, license, truncated body; View / Replace / Clear)
-- Room sync of packs is not built yet (later bite); host/join multiplayer still works for the board
+- Solo: active pack in browser `localStorage` (works offline)
+- Sidebar **Active rules pack** panel for all roles (title, license, attribution, View)
+- Multiplayer: DM attaches/replaces/clears the room pack; it syncs over WebSocket; players are read-only
+- Late joiners receive the current room pack in `joined` / `state`
 
 For a short CC-licensed one-pager to paste yourself while testing, see
 [Lasers & Feelings](https://johnharper.itch.io/lasers-feelings) (CC BY 4.0) — download/copy from the author; do not commit that text here.
@@ -63,7 +64,7 @@ For a short CC-licensed one-pager to paste yourself while testing, see
 ## What works
 
 - **Multiplayer rooms:** Host/Join with short code; DM + players sync mapRadius + pieces over WebSocket
-- **Rules pack import:** Paste/upload .txt/.md + license + rights checkbox; active pack in localStorage (no bundled rulebooks)
+- **Rules pack:** Paste/upload .txt/.md + license + rights checkbox; solo localStorage; DM syncs room pack to players (read-only)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story, no AI)
 - Pointy-top hex grid (axial coords) with pan + scroll zoom

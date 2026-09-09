@@ -476,7 +476,7 @@
   cursor: not-allowed;
 }
 
-/* Rules pack panel (Bite A — local only) */
+/* Rules pack panel (Bite A local + Bite B/C room) */
 .rules-panel {
   padding: 10px 12px 12px;
   border-bottom: 1px solid #333946;
@@ -667,4 +667,36 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.rules-sample {
+  margin: 0 0 0.65rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #9aa3b5;
+}
+
+.rules-sample a {
+  color: #9ec5ff;
+}
+
+.rules-readonly-badge,
+.rules-room-badge {
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.rules-readonly-badge {
+  background: #2a3142;
+  color: #c5cddc;
+}
+
+.rules-room-badge {
+  background: #1e3a5f;
+  color: #9ec5ff;
 }

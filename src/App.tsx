@@ -247,15 +247,48 @@ function App() {
   const cellCount = hexCount(mapRadius)
   const radiusEditable = canChangeRadius(room.role, inRoom)
 
-  const onAttachRulesPack = useCallback((pack: RulesPack) => {
-    setActiveRulesPack(pack)
-    saveActiveRulesPack(pack)
-  }, [])
+  // Solo: localStorage. In a room: DM pushes to room state; players see remote pack.
+  const displayRulesPack =
+    inRoom && room.remoteState
+      ? (room.remoteState.rulesPack ?? null)
+      : activeRulesPack
+  const rulesReadOnly = inRoom && room.role !== 'dm'
+
+  const onAttachRulesPack = useCallback(
+    (pack: RulesPack) => {
+      // Keep a personal local copy so solo offline still works after leave.
+      setActiveRulesPack(pack)
+      saveActiveRulesPack(pack)
+      if (inRoom && room.role === 'dm') {
+        room.setRulesPack(pack)
+      }
+    },
+    [inRoom, room],
+  )
 
   const onClearRulesPack = useCallback(() => {
+    if (inRoom && room.role === 'dm') {
+      room.setRulesPack(null)
+      // Also clear personal solo pack when DM clears the room pack.
+      setActiveRulesPack(null)
+      saveActiveRulesPack(null)
+      return
+    }
+    if (inRoom) return // players cannot clear
     setActiveRulesPack(null)
     saveActiveRulesPack(null)
-  }, [])
+  }, [inRoom, room])
+
+  // Light Bite C: when DM hosts/joins a room with no pack yet, push their local active pack.
+  const setRoomRulesPack = room.setRulesPack
+  const roomRole = room.role
+  const remoteRulesPack = room.remoteState?.rulesPack ?? null
+  useEffect(() => {
+    if (!inRoom || roomRole !== 'dm') return
+    if (!activeRulesPack) return
+    if (remoteRulesPack) return
+    setRoomRulesPack(activeRulesPack)
+  }, [inRoom, roomRole, remoteRulesPack, activeRulesPack, setRoomRulesPack])
 
   const handleLeave = () => {
     room.leave()
@@ -319,8 +352,10 @@ function App() {
         }
         rulesSlot={
           <RulesPackPanel
-            pack={activeRulesPack}
+            pack={displayRulesPack}
             importedBy={room.clientId || 'local'}
+            readOnly={rulesReadOnly}
+            inRoom={inRoom}
             onAttach={onAttachRulesPack}
             onClear={onClearRulesPack}
           />
