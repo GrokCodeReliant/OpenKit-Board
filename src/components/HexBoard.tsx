@@ -3,6 +3,11 @@ import type { Role } from '../multiplayer/protocol'
 import { canControlPiece } from '../multiplayer/useRoom'
 import type { AssetDef, HexCoord, PlacedPiece } from '../types'
 import {
+  clampHexZoom,
+  VIEW_PRESETS,
+  type CameraView,
+} from '../cameraViews'
+import {
   HEX_SIZE,
   axialToPixel,
   generateHexMap,
@@ -26,6 +31,7 @@ interface HexBoardProps {
   onSelectPiece: (id: string | null) => void
   onMovePiece: (id: string, q: number, r: number) => void
   onDropAsset: (assetId: string, q: number, r: number) => void
+  cameraView: CameraView
 }
 
 export function HexBoard({
@@ -43,10 +49,11 @@ export function HexBoard({
   onSelectPiece,
   onMovePiece,
   onDropAsset,
+  cameraView,
 }: HexBoardProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoom] = useState(() => VIEW_PRESETS[cameraView].hexZoom)
   const [dragging, setDragging] = useState(false)
   const dragRef = useRef<{
     mode: 'pan' | 'piece'
@@ -68,13 +75,17 @@ export function HexBoard({
     [validKeys],
   )
 
-  // Center pan on first layout
-  useEffect(() => {
+  const recenter = useCallback(() => {
     const el = wrapRef.current
     if (!el) return
     const { width, height } = el.getBoundingClientRect()
     setPan({ x: width / 2, y: height / 2 })
   }, [])
+
+  // Center pan on first layout (HexBoard remounts on cameraView change via key)
+  useEffect(() => {
+    recenter()
+  }, [recenter])
 
   const screenToWorld = useCallback(
     (clientX: number, clientY: number) => {
@@ -111,7 +122,7 @@ export function HexBoard({
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
-    setZoom((z) => Math.min(2.5, Math.max(0.35, z * factor)))
+    setZoom((z) => clampHexZoom(z * factor))
   }
 
   const onPointerDown = (e: React.PointerEvent) => {

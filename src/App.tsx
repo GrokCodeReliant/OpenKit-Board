@@ -3,6 +3,7 @@ import { loadAssetsFromManifest } from './assets'
 import { HexBoard } from './components/HexBoard'
 import { RoomPanel } from './components/RoomPanel'
 import { PresenceToggle } from './components/PresenceToggle'
+import { ViewPresets } from './components/ViewPresets'
 import { RoomBackdrop } from './components/RoomBackdrop'
 import { RulesPackPanel } from './components/RulesPackPanel'
 import { Sidebar } from './components/Sidebar'
@@ -18,6 +19,12 @@ import type { RulesPack } from './rulesPack'
 import { loadActiveRulesPack, saveActiveRulesPack } from './rulesPack'
 import type { RoomMode } from './roomShell'
 import { loadRoomMode, saveRoomMode } from './roomShell'
+import type { CameraView } from './cameraViews'
+import {
+  loadCameraView,
+  saveCameraView,
+  VIEW_PRESETS,
+} from './cameraViews'
 import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PlacedPiece } from './types'
 import { layerForCategory } from './types'
 import './App.css'
@@ -64,10 +71,16 @@ function App() {
     loadActiveRulesPack(),
   )
   const [roomMode, setRoomMode] = useState<RoomMode>(() => loadRoomMode())
+  const [cameraView, setCameraView] = useState<CameraView>(() => loadCameraView())
 
   const onRoomModeChange = useCallback((mode: RoomMode) => {
     setRoomMode(mode)
     saveRoomMode(mode)
+  }, [])
+
+  const onCameraViewChange = useCallback((view: CameraView) => {
+    setCameraView(view)
+    saveCameraView(view)
   }, [])
 
   const room = useRoom(urlJoin)
@@ -375,6 +388,7 @@ function App() {
         {roomMode !== 'void' && <RoomBackdrop />}
         <div className="room-vignette" aria-hidden="true" />
         <PresenceToggle mode={roomMode} onChange={onRoomModeChange} />
+        <ViewPresets view={cameraView} onChange={onCameraViewChange} />
         {loadError && (
           <div className="banner error">Failed to load assets: {loadError}</div>
         )}
@@ -396,10 +410,18 @@ function App() {
             scenes.
           </div>
         )}
-        <div className="table-stage">
-          <div className="table-object" aria-label="Game table">
+        <div className={`table-stage view-${cameraView}`}>
+          <div
+            className={`table-object view-${cameraView}`}
+            aria-label="Game table"
+            style={{
+              // Subtle CSS tilt + scale; Close still leaves a wood-rim strip in frame
+              transform: `rotateX(${VIEW_PRESETS[cameraView].rotateXDeg}deg) scale(${VIEW_PRESETS[cameraView].boardScale})`,
+            }}
+          >
             <div className="table-well">
               <HexBoard
+                key={cameraView}
                 mapRadius={mapRadius}
                 assetsById={assetsById}
                 pieces={pieces}
@@ -414,6 +436,7 @@ function App() {
                 onSelectPiece={onSelectPiece}
                 onMovePiece={onMovePiece}
                 onDropAsset={placeAsset}
+                cameraView={cameraView}
               />
             </div>
           </div>
