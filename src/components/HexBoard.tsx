@@ -79,8 +79,11 @@ interface DragState {
   baseSize?: number
 }
 
-const HANDLE_R = 5
-const ROTATE_GAP = 18
+/** Visual handle radius in screen pixels (world size = this / zoom). */
+const HANDLE_SCREEN_R = 12
+/** Hit-test radius in screen pixels (slightly larger than visual). */
+const HANDLE_HIT_SCREEN = 14
+const ROTATE_GAP_SCREEN = 28
 const MIN_SCALE = 0.15
 const MAX_SCALE = 6
 
@@ -113,13 +116,15 @@ function pieceCenter(piece: PlacedPiece, t: PieceTransform) {
   }
 }
 
-function handleLayout(piece: PlacedPiece, t: PieceTransform) {
+function handleLayout(piece: PlacedPiece, t: PieceTransform, zoom: number) {
   const base = baseSizeFor(piece)
   const w = base * t.scaleX
   const h = base * t.scaleY
   const c = pieceCenter(piece, t)
   const hw = w / 2
   const hh = h / 2
+  const z = Math.max(zoom, 0.25)
+  const rotateGap = ROTATE_GAP_SCREEN / z
   // Handles sit in unrotated local space; we rotate them with the piece group.
   return {
     cx: c.x,
@@ -129,6 +134,8 @@ function handleLayout(piece: PlacedPiece, t: PieceTransform) {
     hw,
     hh,
     rotationDeg: t.rotationDeg,
+    handleR: HANDLE_SCREEN_R / z,
+    rotateGap,
     local: {
       nw: { x: -hw, y: -hh },
       ne: { x: hw, y: -hh },
@@ -138,7 +145,7 @@ function handleLayout(piece: PlacedPiece, t: PieceTransform) {
       s: { x: 0, y: hh },
       e: { x: hw, y: 0 },
       w: { x: -hw, y: 0 },
-      rotate: { x: 0, y: -hh - ROTATE_GAP },
+      rotate: { x: 0, y: -hh - rotateGap },
       body: { x: 0, y: 0 },
     } as Record<HandleKind, { x: number; y: number }>,
   }
@@ -158,12 +165,12 @@ function hitHandle(
   t: PieceTransform,
   zoom: number,
 ): HandleKind | null {
-  const layout = handleLayout(piece, t)
+  const layout = handleLayout(piece, t, zoom)
   const lx = worldX - layout.cx
   const ly = worldY - layout.cy
   // Inverse-rotate into local handle space
   const inv = rotateLocal(lx, ly, -layout.rotationDeg)
-  const thresh = (HANDLE_R + 4) / Math.max(zoom, 0.25)
+  const thresh = HANDLE_HIT_SCREEN / Math.max(zoom, 0.25)
 
   const order: HandleKind[] = [
     'rotate',
@@ -193,6 +200,35 @@ function hitHandle(
   return null
 }
 
+function handleDragMode(hit: HandleKind): DragMode | null {
+  if (hit === 'rotate') return 'rotate'
+  if (hit === 'n' || hit === 's' || hit === 'e' || hit === 'w') return 'scale-edge'
+  if (hit === 'nw' || hit === 'ne' || hit === 'sw' || hit === 'se')
+    return 'scale-corner'
+  return null
+}
+
+function cursorForHandle(kind: HandleKind): string {
+  switch (kind) {
+    case 'rotate':
+      return 'grab'
+    case 'n':
+    case 's':
+      return 'ns-resize'
+    case 'e':
+    case 'w':
+      return 'ew-resize'
+    case 'nw':
+    case 'se':
+      return 'nwse-resize'
+    case 'ne':
+    case 'sw':
+      return 'nesw-resize'
+    default:
+      return 'move'
+  }
+}
+
 export function HexBoard({
   mapRadius,
   assetsById,
@@ -213,6 +249,7 @@ export function HexBoard({
   onZoomChange,
 }: HexBoardProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
   const didCenterRef = useRef(false)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(() => VIEW_PRESETS[cameraView].hexZoom)
@@ -232,8 +269,9 @@ export function HexBoard({
     const el = wrapRef.current
     if (!el) return
     const measure = () => {
-      const { width, height } = el.getBoundingClientRect()
-      setViewSize({ w: width, h: height })
+      // Layout box (not getBoundingClientRect) so ancestor CSS scale
+      // on .table-object does not skew fit-zoom / pan centering.
+      setViewSize({ w: el.clientWidth, h: el.clientHeight })
     }
     measure()
     const ro = new ResizeObserver(measure)
@@ -262,9 +300,8 @@ export function HexBoard({
   const recenter = useCallback(() => {
     const el = wrapRef.current
     if (!el) return
-    const { width, height } = el.getBoundingClientRect()
     didCenterRef.current = true
-    setPan({ x: width / 2, y: height / 2 })
+    setPan({ x: el.clientWidth / 2, y: el.clientHeight / 2 })
   }, [])
 
   useEffect(() => {
@@ -280,19 +317,26 @@ export function HexBoard({
     setLivePatch(null)
   }, [selectedPieceId])
 
+  /** Client (screen) → SVG root user space, via CTM (handles ancestor CSS scale). */
+  const clientToSvg = useCallback((clientX: number, clientY: number) => {
+    const svg = svgRef.current
+    if (!svg) return { x: 0, y: 0 }
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return { x: 0, y: 0 }
+    const local = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse())
+    return { x: local.x, y: local.y }
+  }, [])
+
+  /** Client → board world coords (inside pan/zoom group). */
   const screenToWorld = useCallback(
     (clientX: number, clientY: number) => {
-      const el = wrapRef.current
-      if (!el) return { x: 0, y: 0 }
-      const rect = el.getBoundingClientRect()
-      const sx = clientX - rect.left
-      const sy = clientY - rect.top
+      const { x, y } = clientToSvg(clientX, clientY)
       return {
-        x: (sx - pan.x) / zoom,
-        y: (sy - pan.y) / zoom,
+        x: (x - pan.x) / zoom,
+        y: (y - pan.y) / zoom,
       }
     },
-    [pan, zoom],
+    [clientToSvg, pan, zoom],
   )
 
   const cellAtClient = useCallback(
@@ -326,12 +370,14 @@ export function HexBoard({
   const onWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     const el = wrapRef.current
-    const { width, height } = el?.getBoundingClientRect() ?? {
-      width: viewSize.w,
-      height: viewSize.h,
-    }
+    const width = el?.clientWidth || viewSize.w
+    const height = el?.clientHeight || viewSize.h
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
     setZoom((z) => clampBoardZoom(z * factor, mapRadius, width, height))
+  }
+
+  const capturePointer = (e: React.PointerEvent) => {
+    wrapRef.current?.setPointerCapture?.(e.pointerId)
   }
 
   const beginPan = (e: React.PointerEvent) => {
@@ -343,7 +389,64 @@ export function HexBoard({
       panY: pan.y,
     }
     setDragging(true)
-    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+    capturePointer(e)
+  }
+
+  const beginTransformDrag = (
+    hit: HandleKind,
+    e: React.PointerEvent,
+    piece: PlacedPiece,
+  ) => {
+    const t = pieceTransform(piece)
+    const world = screenToWorld(e.clientX, e.clientY)
+    const c = pieceCenter(piece, t)
+    if (hit === 'body') {
+      if (!t.lockedToCell) return false
+      dragRef.current = {
+        mode: 'offset',
+        startX: e.clientX,
+        startY: e.clientY,
+        panX: pan.x,
+        panY: pan.y,
+        pieceId: piece.id,
+        handle: 'body',
+        startT: t,
+        originX: c.x,
+        originY: c.y,
+        baseSize: baseSizeFor(piece),
+      }
+    } else {
+      const mode = handleDragMode(hit)
+      if (!mode) return false
+      const startAngleDeg =
+        (Math.atan2(world.y - c.y, world.x - c.x) * 180) / Math.PI
+      dragRef.current = {
+        mode,
+        startX: e.clientX,
+        startY: e.clientY,
+        panX: pan.x,
+        panY: pan.y,
+        pieceId: piece.id,
+        handle: hit,
+        startT: t,
+        originX: c.x,
+        originY: c.y,
+        startAngleDeg,
+        baseSize: baseSizeFor(piece),
+      }
+    }
+    setDragging(true)
+    capturePointer(e)
+    e.preventDefault()
+    e.stopPropagation()
+    return true
+  }
+
+  const onHandlePointerDown = (kind: HandleKind, e: React.PointerEvent) => {
+    if (e.button !== 0 || e.altKey) return
+    if (!selectedPiece) return
+    if (!canControlPiece(role, inRoom, clientId, selectedPiece)) return
+    beginTransformDrag(kind, e, selectedPiece)
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -357,7 +460,7 @@ export function HexBoard({
         panY: pan.y,
       }
       setDragging(true)
-      ;(e.target as Element).setPointerCapture?.(e.pointerId)
+      capturePointer(e)
       return
     }
 
@@ -366,57 +469,18 @@ export function HexBoard({
     const world = screenToWorld(e.clientX, e.clientY)
 
     // Transform handles on selected controllable piece take priority
+    // (also started via interactive handle onPointerDown; this is geometric fallback)
     if (selectedPiece) {
       const movable = canControlPiece(role, inRoom, clientId, selectedPiece)
       if (movable) {
         const t = pieceTransform(selectedPiece)
         const hit = hitHandle(world.x, world.y, selectedPiece, t, zoom)
         if (hit && hit !== 'body') {
-          const c = pieceCenter(selectedPiece, t)
-          const mode: DragMode =
-            hit === 'rotate'
-              ? 'rotate'
-              : hit === 'n' || hit === 's' || hit === 'e' || hit === 'w'
-                ? 'scale-edge'
-                : 'scale-corner'
-          const startAngleDeg =
-            (Math.atan2(world.y - c.y, world.x - c.x) * 180) / Math.PI
-          dragRef.current = {
-            mode,
-            startX: e.clientX,
-            startY: e.clientY,
-            panX: pan.x,
-            panY: pan.y,
-            pieceId: selectedPiece.id,
-            handle: hit,
-            startT: t,
-            originX: c.x,
-            originY: c.y,
-            startAngleDeg,
-            baseSize: baseSizeFor(selectedPiece),
-          }
-          setDragging(true)
-          ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
-          e.stopPropagation()
+          beginTransformDrag(hit, e, selectedPiece)
           return
         }
         if (hit === 'body' && t.lockedToCell) {
-          // Locked: body-drag nudges image offset (cell ownership stays)
-          dragRef.current = {
-            mode: 'offset',
-            startX: e.clientX,
-            startY: e.clientY,
-            panX: pan.x,
-            panY: pan.y,
-            pieceId: selectedPiece.id,
-            handle: 'body',
-            startT: t,
-            originX: pieceCenter(selectedPiece, t).x,
-            originY: pieceCenter(selectedPiece, t).y,
-            baseSize: baseSizeFor(selectedPiece),
-          }
-          setDragging(true)
-          ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+          beginTransformDrag('body', e, selectedPiece)
           return
         }
       }
@@ -466,7 +530,7 @@ export function HexBoard({
           }
         }
         setDragging(true)
-        ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+        capturePointer(e)
       }
       return
     }
@@ -488,9 +552,11 @@ export function HexBoard({
     if (!d) return
 
     if (d.mode === 'pan') {
+      const cur = clientToSvg(e.clientX, e.clientY)
+      const start = clientToSvg(d.startX, d.startY)
       setPan({
-        x: d.panX + (e.clientX - d.startX),
-        y: d.panY + (e.clientY - d.startY),
+        x: d.panX + (cur.x - start.x),
+        y: d.panY + (cur.y - start.y),
       })
       return
     }
@@ -504,8 +570,9 @@ export function HexBoard({
     const world = screenToWorld(e.clientX, e.clientY)
 
     if (d.mode === 'offset') {
-      const dx = (e.clientX - d.startX) / zoom / CELL_SIZE
-      const dy = (e.clientY - d.startY) / zoom / CELL_SIZE
+      const startW = screenToWorld(d.startX, d.startY)
+      const dx = (world.x - startW.x) / CELL_SIZE
+      const dy = (world.y - startW.y) / CELL_SIZE
       applyLive(d.pieceId, {
         offsetX: Math.min(8, Math.max(-8, d.startT.offsetX + dx)),
         offsetY: Math.min(8, Math.max(-8, d.startT.offsetY + dy)),
@@ -633,7 +700,7 @@ export function HexBoard({
       onDrop={onDrop}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <svg className="hex-svg" width="100%" height="100%">
+      <svg ref={svgRef} className="hex-svg" width="100%" height="100%">
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
           {cells.map(({ q, r }) => {
             const { x, y } = squareToPixel(q, r)
@@ -702,7 +769,11 @@ export function HexBoard({
 
           {/* Edit handles for selected piece */}
           {selectedPiece && selectedCanEdit && (
-            <TransformHandles piece={selectedPiece} />
+            <TransformHandles
+              piece={selectedPiece}
+              zoom={zoom}
+              onHandlePointerDown={onHandlePointerDown}
+            />
           )}
 
           {selectedAssetId && hoverHex && isOnMap(hoverHex.q, hoverHex.r) && (
@@ -728,18 +799,31 @@ export function HexBoard({
   )
 }
 
-function TransformHandles({ piece }: { piece: PlacedPiece }) {
+function TransformHandles({
+  piece,
+  zoom,
+  onHandlePointerDown,
+}: {
+  piece: PlacedPiece
+  zoom: number
+  onHandlePointerDown: (kind: HandleKind, e: React.PointerEvent) => void
+}) {
   const t = pieceTransform(piece)
-  const layout = handleLayout(piece, t)
+  const layout = handleLayout(piece, t, zoom)
   const corners: HandleKind[] = ['nw', 'ne', 'sw', 'se']
   const edges: HandleKind[] = ['n', 's', 'e', 'w']
-  const r = HANDLE_R
+  const r = layout.handleR
+  const rotateY = -layout.hh - layout.rotateGap
+
+  const handlePtr =
+    (kind: HandleKind) => (e: React.PointerEvent<SVGElement>) => {
+      onHandlePointerDown(kind, e)
+    }
 
   return (
     <g
       className="piece-transform-handles"
       transform={`translate(${layout.cx}, ${layout.cy}) rotate(${layout.rotationDeg})`}
-      style={{ pointerEvents: 'none' }}
     >
       <rect
         className="piece-transform-box"
@@ -754,13 +838,15 @@ function TransformHandles({ piece }: { piece: PlacedPiece }) {
         x1={0}
         y1={-layout.hh}
         x2={0}
-        y2={-layout.hh - ROTATE_GAP}
+        y2={rotateY}
       />
       <circle
         className="piece-handle piece-handle-rotate"
         cx={0}
-        cy={-layout.hh - ROTATE_GAP}
+        cy={rotateY}
         r={r}
+        style={{ pointerEvents: 'all', cursor: cursorForHandle('rotate') }}
+        onPointerDown={handlePtr('rotate')}
       />
       {corners.map((k) => (
         <rect
@@ -770,23 +856,27 @@ function TransformHandles({ piece }: { piece: PlacedPiece }) {
           y={layout.local[k].y - r}
           width={r * 2}
           height={r * 2}
+          style={{ pointerEvents: 'all', cursor: cursorForHandle(k) }}
+          onPointerDown={handlePtr(k)}
         />
       ))}
       {edges.map((k) => (
         <rect
           key={k}
           className="piece-handle piece-handle-edge"
-          x={layout.local[k].x - r * 0.7}
-          y={layout.local[k].y - r * 0.7}
-          width={r * 1.4}
-          height={r * 1.4}
+          x={layout.local[k].x - r * 0.75}
+          y={layout.local[k].y - r * 0.75}
+          width={r * 1.5}
+          height={r * 1.5}
+          style={{ pointerEvents: 'all', cursor: cursorForHandle(k) }}
+          onPointerDown={handlePtr(k)}
         />
       ))}
       {t.lockedToCell && (
         <text
           className="piece-lock-badge"
           x={0}
-          y={layout.hh + 12}
+          y={layout.hh + 14 / Math.max(zoom, 0.25)}
           textAnchor="middle"
         >
           locked

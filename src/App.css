@@ -1043,7 +1043,8 @@
   fill: #f8f0d8;
   stroke: #c9a227;
   stroke-width: 1.25;
-  pointer-events: none;
+  /* Interactive grabbers — HexBoard sets cursor + onPointerDown */
+  pointer-events: all;
 }
 
 .piece-handle-rotate {
