@@ -6,6 +6,7 @@ import { PresenceToggle } from './components/PresenceToggle'
 import { ViewPresets } from './components/ViewPresets'
 import { MuteToggle } from './components/MuteToggle'
 import { NewBoardButton } from './components/NewBoardButton'
+import { SeatPads } from './components/SeatPads'
 import { RoomBackdrop } from './components/RoomBackdrop'
 import { RulesPackPanel } from './components/RulesPackPanel'
 import { Sidebar } from './components/Sidebar'
@@ -513,6 +514,7 @@ function App() {
                 transform: `rotateX(${VIEW_PRESETS[cameraView].rotateXDeg}deg) scale(${VIEW_PRESETS[cameraView].boardScale})`,
               }}
             >
+              <SeatPads />
               <div className="table-well">
                 <HexBoard
                   key={cameraView}
