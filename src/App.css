@@ -301,14 +301,7 @@
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  will-change: transform;
-  transition: transform 80ms linear;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .room-backdrop {
-    transition: none;
-  }
+  transform: scale(1.06);
 }
 
 .room-wall {
@@ -709,9 +702,6 @@
   justify-content: center;
   position: relative;
   z-index: 2;
-  /* Bite 4: flatscreen camera — perspective for subtle board tilt */
-  perspective: 1400px;
-  perspective-origin: 50% 42%;
   overflow: hidden;
 }
 
@@ -728,7 +718,6 @@
   padding: 28px;
   box-sizing: border-box;
   transform-origin: 50% 55%;
-  transform-style: preserve-3d;
   will-change: transform;
   transition: transform 280ms ease;
   background:
@@ -749,8 +738,7 @@
     inset 0 -4px 10px rgba(0, 0, 0, 0.5);
 }
 
-/* Default / tilt: slightly stronger contact shadow under the foreshortened board */
-.table-object.view-tilt,
+/* Close preset: slightly stronger drop shadow under the scaled-up table */
 .table-object.view-close {
   box-shadow:
     0 42px 78px rgba(0, 0, 0, 0.7),
@@ -1526,57 +1514,4 @@
 .rules-room-badge {
   background: #c9a86a;
   color: #2a1e10;
-}
-
-/* ---- Bite 8: miniature scale polish (edge DOF + pan parallax) ---- */
-/* Soft edge blur when zoomed far in — radial mask keeps center readable. */
-.mini-dof {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  pointer-events: none;
-  opacity: 0;
-  border-radius: inherit;
-  transition: opacity 180ms ease;
-  /* Dual-layer feel: slight cool wash at periphery + backdrop blur */
-  background: radial-gradient(
-    ellipse 58% 52% at 50% 48%,
-    transparent 0%,
-    transparent 42%,
-    rgba(8, 10, 14, 0.12) 70%,
-    rgba(6, 8, 12, 0.28) 100%
-  );
-  backdrop-filter: blur(var(--mini-dof-blur, 0px));
-  -webkit-backdrop-filter: blur(var(--mini-dof-blur, 0px));
-  -webkit-mask-image: radial-gradient(
-    ellipse 54% 50% at 50% 48%,
-    transparent 0%,
-    transparent 38%,
-    rgba(0, 0, 0, 0.45) 68%,
-    #000 100%
-  );
-  mask-image: radial-gradient(
-    ellipse 54% 50% at 50% 48%,
-    transparent 0%,
-    transparent 38%,
-    rgba(0, 0, 0, 0.45) 68%,
-    #000 100%
-  );
-}
-
-.table-stage.has-mini-dof .table-object {
-  /* Tiny extra “lean in” contact under the table when DOF is active */
-  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mini-dof {
-    transition: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
-  .table-stage.has-mini-dof .table-object {
-    filter: none;
-  }
 }

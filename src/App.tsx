@@ -34,11 +34,6 @@ import {
   markEstablishingShotSeen,
   shouldPlayEstablishingShot,
 } from './establishingShot'
-import {
-  DOF_BLUR_PX,
-  dofAmountFromZoom,
-  parallaxFromPan,
-} from './miniatureScale'
 import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PlacedPiece } from './types'
 import { layerForCategory } from './types'
 import './App.css'
@@ -88,8 +83,6 @@ function App() {
   const [cameraView, setCameraView] = useState<CameraView>(() => loadCameraView())
   const [muted, setMuted] = useState(() => loadMuted())
   const [hexZoom, setHexZoom] = useState(() => VIEW_PRESETS[loadCameraView()].hexZoom)
-  /** Bite 8: pan offset from board center for backdrop parallax. */
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
   /** Bite 6: room overview → table well on first load / New board. */
   const [establishingPhase, setEstablishingPhase] = useState<
     'overview' | 'arriving' | 'settled'
@@ -125,13 +118,6 @@ function App() {
   const onHexZoomChange = useCallback((z: number) => {
     setHexZoom(z)
   }, [])
-
-  const onHexPanChange = useCallback((offset: { x: number; y: number }) => {
-    setPanOffset(offset)
-  }, [])
-
-  const roomParallax = useMemo(() => parallaxFromPan(panOffset), [panOffset])
-  const dofAmount = useMemo(() => dofAmountFromZoom(hexZoom), [hexZoom])
 
   // Paint overview, then ease into the table well. Deps are shot id/active only
   // so flipping phase to "arriving" does not cancel the settle timeout.
@@ -484,9 +470,7 @@ function App() {
         }
       />
       <main className={`main room-mode-${roomMode}`}>
-        {roomMode !== 'void' && (
-          <RoomBackdrop parallaxX={roomParallax.x} parallaxY={roomParallax.y} />
-        )}
+        {roomMode !== 'void' && <RoomBackdrop />}
         <div className="room-vignette" aria-hidden="true" />
         <PresenceToggle mode={roomMode} onChange={onRoomModeChange} />
         <ViewPresets view={cameraView} onChange={onCameraViewChange} />
@@ -519,15 +503,15 @@ function App() {
         <div
           className={`table-stage view-${cameraView}${
             establishingPhase !== 'settled' ? ' is-establishing' : ''
-          }${dofAmount > 0.05 ? ' has-mini-dof' : ''}`}
+          }`}
         >
           <div className={`establishing-lens phase-${establishingPhase}`}>
             <div
               className={`table-object view-${cameraView}`}
               aria-label="Game table"
               style={{
-                // Subtle CSS tilt + scale; Close still leaves a wood-rim strip in frame
-                transform: `rotateX(${VIEW_PRESETS[cameraView].rotateXDeg}deg) scale(${VIEW_PRESETS[cameraView].boardScale})`,
+                // Flat top-down scale only; Close still leaves a wood-rim strip in frame
+                transform: `scale(${VIEW_PRESETS[cameraView].boardScale})`,
               }}
             >
               <SeatPads />
@@ -550,16 +534,6 @@ function App() {
                   onDropAsset={placeAsset}
                   cameraView={cameraView}
                   onZoomChange={onHexZoomChange}
-                  onPanChange={onHexPanChange}
-                />
-                {/* Bite 8: soft edge DOF — center stays sharp for readability */}
-                <div
-                  className="mini-dof"
-                  aria-hidden="true"
-                  style={{
-                    opacity: dofAmount,
-                    ['--mini-dof-blur' as string]: `${DOF_BLUR_PX * dofAmount}px`,
-                  }}
                 />
               </div>
             </div>

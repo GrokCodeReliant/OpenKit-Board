@@ -34,8 +34,6 @@ interface HexBoardProps {
   cameraView: CameraView
   /** Optional live hex zoom for ambience crossfade (Bite 5). */
   onZoomChange?: (zoom: number) => void
-  /** Optional pan offset from board center for room parallax (Bite 8). */
-  onPanChange?: (offset: { x: number; y: number }) => void
 }
 
 export function HexBoard({
@@ -55,7 +53,6 @@ export function HexBoard({
   onDropAsset,
   cameraView,
   onZoomChange,
-  onPanChange,
 }: HexBoardProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const didCenterRef = useRef(false)
@@ -66,19 +63,6 @@ export function HexBoard({
   useEffect(() => {
     onZoomChange?.(zoom)
   }, [zoom, onZoomChange])
-
-  // Report pan offset from visual center so the room shell can parallax (Bite 8).
-  useEffect(() => {
-    if (!onPanChange || !didCenterRef.current) return
-    const el = wrapRef.current
-    if (!el) return
-    const { width, height } = el.getBoundingClientRect()
-    if (width < 1 || height < 1) return
-    onPanChange({
-      x: pan.x - width / 2,
-      y: pan.y - height / 2,
-    })
-  }, [pan, onPanChange])
 
   const dragRef = useRef<{
     mode: 'pan' | 'piece'

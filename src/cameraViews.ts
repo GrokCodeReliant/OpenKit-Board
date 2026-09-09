@@ -1,14 +1,13 @@
-/** Bite 4 — flatscreen camera grammar (preset views + zoom limits). */
+/** Flat top-down camera presets (pan + zoom). No board tilt. */
 
-export type CameraView = 'top' | 'tilt' | 'close'
+export type CameraView = 'top' | 'close'
 
 export const CAMERA_VIEWS: { id: CameraView; label: string }[] = [
   { id: 'top', label: 'Top-down' },
-  { id: 'tilt', label: 'Slight tilt' },
   { id: 'close', label: 'Close' },
 ]
 
-export const DEFAULT_CAMERA_VIEW: CameraView = 'tilt'
+export const DEFAULT_CAMERA_VIEW: CameraView = 'top'
 
 /** Hex SVG zoom clamps — keep enough of the well/rim context in play. */
 export const HEX_ZOOM_MIN = 0.4
@@ -17,8 +16,6 @@ export const HEX_ZOOM_MAX = 1.75
 export interface ViewPreset {
   /** Target hex-board zoom when the preset is selected. */
   hexZoom: number
-  /** Subtle board tilt in degrees (0 = flat top-down). */
-  rotateXDeg: number
   /**
    * Scale of the whole table object in the stage.
    * Kept ≤ ~1.1 so a strip of wood rim stays in frame on Close.
@@ -27,9 +24,8 @@ export interface ViewPreset {
 }
 
 export const VIEW_PRESETS: Record<CameraView, ViewPreset> = {
-  top: { hexZoom: 0.85, rotateXDeg: 0, boardScale: 0.9 },
-  tilt: { hexZoom: 1, rotateXDeg: 8, boardScale: 0.94 },
-  close: { hexZoom: 1.35, rotateXDeg: 10, boardScale: 1.08 },
+  top: { hexZoom: 0.85, boardScale: 0.9 },
+  close: { hexZoom: 1.35, boardScale: 1.08 },
 }
 
 const STORAGE_KEY = 'openkit-board-camera-view'
@@ -37,7 +33,9 @@ const STORAGE_KEY = 'openkit-board-camera-view'
 export function loadCameraView(): CameraView {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === 'top' || raw === 'tilt' || raw === 'close') return raw
+    if (raw === 'top' || raw === 'close') return raw
+    // Legacy "tilt" (and anything else) → flat top-down
+    if (raw === 'tilt') return 'top'
   } catch {
     /* ignore */
   }
