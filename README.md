@@ -61,7 +61,7 @@ Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
 For a short CC-licensed one-pager to paste yourself while testing, see
 [Lasers & Feelings](https://johnharper.itch.io/lasers-feelings) (CC BY 4.0) — download/copy from the author; do not commit that text here.
 
-## Presence (Bite 1–4)
+## Presence (Bite 1–5)
 
 - **Table well:** hex board sits in a recessed felt well on a wood table object (drop shadow + rim)
 - **Room shell:** original CSS hobby-room backdrop (warm wall / soft shelves / lamp + window glow — not a Demeo clone)

@@ -32,6 +32,8 @@ interface HexBoardProps {
   onMovePiece: (id: string, q: number, r: number) => void
   onDropAsset: (assetId: string, q: number, r: number) => void
   cameraView: CameraView
+  /** Optional live hex zoom for ambience crossfade (Bite 5). */
+  onZoomChange?: (zoom: number) => void
 }
 
 export function HexBoard({
@@ -50,11 +52,16 @@ export function HexBoard({
   onMovePiece,
   onDropAsset,
   cameraView,
+  onZoomChange,
 }: HexBoardProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(() => VIEW_PRESETS[cameraView].hexZoom)
   const [dragging, setDragging] = useState(false)
+
+  useEffect(() => {
+    onZoomChange?.(zoom)
+  }, [zoom, onZoomChange])
   const dragRef = useRef<{
     mode: 'pan' | 'piece'
     startX: number
