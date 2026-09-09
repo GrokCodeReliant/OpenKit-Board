@@ -330,3 +330,148 @@
   font-size: 0.72rem;
   color: #7a8499;
 }
+
+/* Multiplayer room panel */
+.room-panel {
+  padding: 10px 12px 12px;
+  border-bottom: 1px solid #333946;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.room-panel.connected {
+  background: #1c2838;
+}
+
+.room-label {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #c5cad6;
+  font-weight: 600;
+}
+
+.room-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.room-host,
+.room-join button,
+.room-share button,
+.room-leave {
+  appearance: none;
+  border: 1px solid #3a4254;
+  background: #2a303c;
+  color: #e8eaef;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.room-host {
+  background: #3d5a80;
+  border-color: #5b7fad;
+  width: 100%;
+  font-weight: 600;
+}
+
+.room-host:hover:not(:disabled),
+.room-join button:hover:not(:disabled),
+.room-share button:hover,
+.room-leave:hover {
+  background: #4a6d99;
+}
+
+.room-host:disabled,
+.room-join button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.room-join {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 4px;
+}
+
+.room-join input,
+.room-share input,
+.room-join select {
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #3a4254;
+  background: #1a1d24;
+  color: #e8eaef;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+
+.room-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.room-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #3d5a80;
+  color: #fff;
+}
+
+.room-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  font-size: 1rem;
+}
+
+.room-peers {
+  font-size: 0.7rem;
+  color: #8b93a7;
+  margin-left: auto;
+}
+
+.room-share {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px;
+}
+
+.room-leave {
+  width: 100%;
+  font-size: 0.75rem;
+}
+
+.room-error {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #f0a0a0;
+}
+
+.room-hint {
+  margin: 0;
+  font-size: 0.68rem;
+  color: #6d7588;
+}
+
+.board-size-control.disabled {
+  opacity: 0.65;
+}
+
+.lock-hint {
+  color: #8b93a7;
+  font-weight: 400;
+}
+
+.tab:disabled,
+.palette-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

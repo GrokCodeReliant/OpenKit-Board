@@ -20,8 +20,36 @@ npm run build
 npm run preview
 ```
 
+
+## Multiplayer rooms (MVP)
+
+Live sync of board radius + placed pieces over a small WebSocket server.
+DM owns board/assets/terrain; players place/move/delete only their own tokens.
+No auth, no DB — rooms live in server memory.
+
+### Run locally (two terminals)
+
+```bash
+# Terminal A — room server (port 3001)
+npm run server
+
+# Terminal B — Vite client (proxies /ws → :3001)
+npm run dev
+```
+
+Open http://localhost:5173 in two browser tabs:
+
+1. Tab 1: click **Host room** → copy the shareable `?room=CODE&role=dm` URL (or note the code).
+2. Tab 2: enter the room code and **Join** as Player (or open `?room=CODE&role=player`).
+3. DM places a tile; player places a token and moves it; player cannot move the DM tile.
+
+Solo offline mode is unchanged when you are not in a room.
+
+Optional: set `VITE_WS_URL` (e.g. `ws://localhost:3001`) to bypass the Vite proxy.
+
 ## What works
 
+- **Multiplayer rooms:** Host/Join with short code; DM + players sync mapRadius + pieces over WebSocket
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story, no AI)
 - Pointy-top hex grid (axial coords) with pan + scroll zoom
@@ -66,7 +94,7 @@ See categoryFromFilename() in src/assets.ts for prefix rules.
 
 ## Stack
 
-Vite + React + TypeScript. Hex math is simple axial (pointy-top). SVG board.
+Vite + React + TypeScript client; small Node `ws` room server in `server/`. Hex math is simple axial (pointy-top). SVG board.
 
 ## License / assets
 
