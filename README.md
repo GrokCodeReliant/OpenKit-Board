@@ -64,6 +64,22 @@ Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
 For a short CC-licensed one-pager to paste yourself while testing, see
 [Lasers & Feelings](https://johnharper.itch.io/lasers-feelings) (CC BY 4.0) — download/copy from the author; do not commit that text here.
 
+
+## Piece visual transforms
+
+Selected pieces show **rotate / corner / edge** handles on the board. The floating
+index card also has numeric rotation, scale X/Y, offset X/Y (in cell units), and a
+**Lock to cell** checkbox.
+
+- **Lock on (default):** piece stays owned by its home cell; drag the body to nudge
+  the image; pull edge/corner handles to stretch so roads/gates meet neighbors.
+  Hold **Shift** while dragging the body to re-home to another cell.
+- **Lock off:** body-drag moves the home cell (classic); offset/scale/rotation still persist.
+- Rotate handle snaps to 15°; hold **Shift** for free angle.
+- Corner scale is uniform by default; **Shift** for non-uniform.
+- Transforms sync over multiplayer (`update` WS message; server stores fields opaquely).
+- Camera pan/zoom unchanged: scroll zoom, empty-board drag, Alt/middle/right pan.
+
 ## Piece sheet + pin library
 
 Select a placed piece to open a floating **index card** window over the table

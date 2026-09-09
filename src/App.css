@@ -1024,6 +1024,99 @@
   stroke-width: 2.5;
 }
 
+/* Piece visual transform handles (selected) */
+.piece-transform-box {
+  fill: none;
+  stroke: #f0c14a;
+  stroke-width: 1.25;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.piece-handle-stem {
+  stroke: #f0c14a;
+  stroke-width: 1.25;
+  pointer-events: none;
+}
+
+.piece-handle {
+  fill: #f8f0d8;
+  stroke: #c9a227;
+  stroke-width: 1.25;
+  pointer-events: none;
+}
+
+.piece-handle-rotate {
+  fill: #7aa0d4;
+  stroke: #e8f0ff;
+}
+
+.piece-handle-corner {
+  fill: #f8f0d8;
+}
+
+.piece-handle-edge {
+  fill: #e8d48a;
+}
+
+.piece-lock-badge {
+  fill: #f0c14a;
+  font-size: 9px;
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+  user-select: none;
+}
+
+.piece-transform-fields {
+  margin: 4px 0 2px;
+  padding: 8px 10px 10px;
+  border: 1px solid #a89068;
+  border-radius: 4px;
+  background: rgba(250, 246, 238, 0.65);
+}
+
+.piece-transform-fields legend {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #3a3020;
+  padding: 0 4px;
+}
+
+.piece-transform-fields:disabled {
+  opacity: 0.72;
+}
+
+.piece-transform-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+}
+
+.piece-transform-grid .rules-field input {
+  width: 100%;
+}
+
+.piece-lock-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0 4px;
+  font-size: 0.72rem;
+  color: #3a3020;
+  cursor: pointer;
+}
+
+.piece-lock-check input {
+  margin-top: 2px;
+}
+
+.piece-transform-actions {
+  margin-top: 6px;
+}
+
+
+
 /* Bite 8: soft contact shadow under selected token (object layer) */
 .piece-contact-shadow {
   fill: rgba(0, 0, 0, 0.5);

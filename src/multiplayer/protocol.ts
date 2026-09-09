@@ -25,6 +25,16 @@ export type ClientMessage =
       category: AssetCategory
     }
   | { type: 'move'; id: string; q: number; r: number }
+  | {
+      type: 'update'
+      id: string
+      rotationDeg?: number
+      scaleX?: number
+      scaleY?: number
+      offsetX?: number
+      offsetY?: number
+      lockedToCell?: boolean
+    }
   | { type: 'delete'; id: string }
   | { type: 'setRulesPack'; pack: RulesPack | null }
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { AssetDef } from '../types'
+import type { AssetDef, PieceTransform, PlacedPiece } from '../types'
+import { pieceTransform } from '../types'
 import type { PieceLibraryEntry } from '../pieceLibrary'
 
 interface PieceSheetPanelProps {
@@ -7,6 +8,10 @@ interface PieceSheetPanelProps {
   asset: AssetDef | null
   /** Prefill from personal library when present. */
   libraryEntry: PieceLibraryEntry | null
+  /** When the sheet is tied to a selected board piece, expose transforms. */
+  placedPiece?: PlacedPiece | null
+  canEditTransform?: boolean
+  onTransformChange?: (patch: Partial<PieceTransform>) => void
   onPin: (entry: {
     assetId: string
     displayName: string
@@ -20,10 +25,18 @@ interface PieceSheetPanelProps {
   floating?: boolean
 }
 
+function num(v: string, fallback: number): number {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
+
 export function PieceSheetPanel({
   assetId,
   asset,
   libraryEntry,
+  placedPiece = null,
+  canEditTransform = false,
+  onTransformChange,
   onPin,
   onUnpin,
   onClose,
@@ -54,6 +67,8 @@ export function PieceSheetPanel({
   }, [assetId])
 
   const pinned = Boolean(libraryEntry && libraryEntry.assetId === assetId)
+  const t = placedPiece ? pieceTransform(placedPiece) : null
+  const transformEnabled = Boolean(placedPiece && canEditTransform && onTransformChange)
 
   const onSave = () => {
     onPin({
@@ -139,6 +154,121 @@ export function PieceSheetPanel({
           aria-label="Freeform stats"
         />
       </label>
+
+      {t && (
+        <fieldset className="piece-transform-fields" disabled={!transformEnabled}>
+          <legend>Board transform</legend>
+          <p className="piece-sheet-hint">
+            Rotate / scale / nudge so roads and gates abut. Lock keeps the home
+            cell; body-drag nudges the image — stretch edges to fill after.
+            {!transformEnabled && ' (read-only — you do not control this piece)'}
+          </p>
+          <div className="piece-transform-grid">
+            <label className="rules-field">
+              <span>Rotation °</span>
+              <input
+                type="number"
+                step={15}
+                value={Number(t.rotationDeg.toFixed(1))}
+                onChange={(e) =>
+                  onTransformChange?.({
+                    rotationDeg: num(e.target.value, t.rotationDeg),
+                  })
+                }
+                aria-label="Rotation degrees"
+              />
+            </label>
+            <label className="rules-field">
+              <span>Scale X</span>
+              <input
+                type="number"
+                step={0.05}
+                min={0.15}
+                max={6}
+                value={Number(t.scaleX.toFixed(3))}
+                onChange={(e) =>
+                  onTransformChange?.({
+                    scaleX: Math.min(6, Math.max(0.15, num(e.target.value, t.scaleX))),
+                  })
+                }
+                aria-label="Scale X"
+              />
+            </label>
+            <label className="rules-field">
+              <span>Scale Y</span>
+              <input
+                type="number"
+                step={0.05}
+                min={0.15}
+                max={6}
+                value={Number(t.scaleY.toFixed(3))}
+                onChange={(e) =>
+                  onTransformChange?.({
+                    scaleY: Math.min(6, Math.max(0.15, num(e.target.value, t.scaleY))),
+                  })
+                }
+                aria-label="Scale Y"
+              />
+            </label>
+            <label className="rules-field">
+              <span>Offset X (cells)</span>
+              <input
+                type="number"
+                step={0.05}
+                value={Number(t.offsetX.toFixed(3))}
+                onChange={(e) =>
+                  onTransformChange?.({
+                    offsetX: Math.min(8, Math.max(-8, num(e.target.value, t.offsetX))),
+                  })
+                }
+                aria-label="Offset X in cells"
+              />
+            </label>
+            <label className="rules-field">
+              <span>Offset Y (cells)</span>
+              <input
+                type="number"
+                step={0.05}
+                value={Number(t.offsetY.toFixed(3))}
+                onChange={(e) =>
+                  onTransformChange?.({
+                    offsetY: Math.min(8, Math.max(-8, num(e.target.value, t.offsetY))),
+                  })
+                }
+                aria-label="Offset Y in cells"
+              />
+            </label>
+          </div>
+          <label className="piece-lock-check">
+            <input
+              type="checkbox"
+              checked={t.lockedToCell}
+              onChange={(e) =>
+                onTransformChange?.({ lockedToCell: e.target.checked })
+              }
+            />
+            <span>Lock to cell (nudge image; Shift-drag to re-home)</span>
+          </label>
+          <div className="rules-actions piece-transform-actions">
+            <button
+              type="button"
+              className="rules-secondary"
+              disabled={!transformEnabled}
+              onClick={() =>
+                onTransformChange?.({
+                  rotationDeg: 0,
+                  scaleX: 1,
+                  scaleY: 1,
+                  offsetX: 0,
+                  offsetY: 0,
+                })
+              }
+            >
+              Reset transform
+            </button>
+          </div>
+        </fieldset>
+      )}
 
       <p className="piece-sheet-hint">
         Pin saves to your browser library (keyed by asset). Not shared over the
