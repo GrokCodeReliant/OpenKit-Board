@@ -331,8 +331,7 @@ export const boardAudio = {
 
   /** Map camera preset + hex zoom into a proximity blend. */
   syncFromView(view: CameraView, hexZoom?: number): void {
-    const base =
-      view === 'close' ? 0.85 : view === 'tilt' ? 0.28 : view === 'top' ? 0.05 : 0.25
+    const base = view === 'close' ? 0.85 : view === 'top' ? 0.05 : 0.25
     let zoomFactor = 0
     if (typeof hexZoom === 'number' && Number.isFinite(hexZoom)) {
       const span = HEX_ZOOM_MAX - HEX_ZOOM_MIN || 1

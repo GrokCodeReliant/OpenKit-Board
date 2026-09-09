@@ -7,7 +7,7 @@ interface ViewPresetsProps {
 
 export function ViewPresets({ view, onChange }: ViewPresetsProps) {
   return (
-    <div className="view-presets" role="group" aria-label="Board camera view">
+    <div className="view-presets" role="group" aria-label="Board zoom preset">
       {CAMERA_VIEWS.map((v) => (
         <button
           key={v.id}
