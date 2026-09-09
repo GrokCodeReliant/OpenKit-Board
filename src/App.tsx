@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadAssetsFromManifest } from './assets'
 import { HexBoard } from './components/HexBoard'
 import { RoomPanel } from './components/RoomPanel'
+import { RulesPackPanel } from './components/RulesPackPanel'
 import { Sidebar } from './components/Sidebar'
 import { generateHexMap, hexKey } from './hex'
 import type { Role } from './multiplayer/protocol'
@@ -11,6 +12,8 @@ import {
   canPlaceCategory,
   useRoom,
 } from './multiplayer/useRoom'
+import type { RulesPack } from './rulesPack'
+import { loadActiveRulesPack, saveActiveRulesPack } from './rulesPack'
 import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PlacedPiece } from './types'
 import { layerForCategory } from './types'
 import './App.css'
@@ -53,6 +56,9 @@ function App() {
   const [hoverHex, setHoverHex] = useState<HexCoord | null>(null)
   const [localRadius, setLocalRadius] = useState(DEFAULT_RADIUS)
   const [urlJoin] = useState(() => parseRoomFromUrl())
+  const [activeRulesPack, setActiveRulesPack] = useState<RulesPack | null>(() =>
+    loadActiveRulesPack(),
+  )
 
   const room = useRoom(urlJoin)
 
@@ -241,6 +247,16 @@ function App() {
   const cellCount = hexCount(mapRadius)
   const radiusEditable = canChangeRadius(room.role, inRoom)
 
+  const onAttachRulesPack = useCallback((pack: RulesPack) => {
+    setActiveRulesPack(pack)
+    saveActiveRulesPack(pack)
+  }, [])
+
+  const onClearRulesPack = useCallback(() => {
+    setActiveRulesPack(null)
+    saveActiveRulesPack(null)
+  }, [])
+
   const handleLeave = () => {
     room.leave()
     const url = new URL(window.location.href)
@@ -299,6 +315,14 @@ function App() {
             onHost={room.host}
             onJoin={room.join}
             onLeave={handleLeave}
+          />
+        }
+        rulesSlot={
+          <RulesPackPanel
+            pack={activeRulesPack}
+            importedBy={room.clientId || 'local'}
+            onAttach={onAttachRulesPack}
+            onClear={onClearRulesPack}
           />
         }
       />

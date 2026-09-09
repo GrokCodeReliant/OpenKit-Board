@@ -47,9 +47,23 @@ Solo offline mode is unchanged when you are not in a room.
 
 Optional: set `VITE_WS_URL` (e.g. `ws://localhost:3001`) to bypass the Vite proxy.
 
+## Rules packs (Bite A)
+
+Import **your own** rules text for the session — paste or upload `.txt` / `.md`.
+Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
+
+- Fields: title, license (free text), body, required rights acknowledgment
+- Active pack is stored in browser `localStorage` (solo / this machine)
+- Sidebar shows **Active rules pack** (title, license, truncated body; View / Replace / Clear)
+- Room sync of packs is not built yet (later bite); host/join multiplayer still works for the board
+
+For a short CC-licensed one-pager to paste yourself while testing, see
+[Lasers & Feelings](https://johnharper.itch.io/lasers-feelings) (CC BY 4.0) — download/copy from the author; do not commit that text here.
+
 ## What works
 
 - **Multiplayer rooms:** Host/Join with short code; DM + players sync mapRadius + pieces over WebSocket
+- **Rules pack import:** Paste/upload .txt/.md + license + rights checkbox; active pack in localStorage (no bundled rulebooks)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story, no AI)
 - Pointy-top hex grid (axial coords) with pan + scroll zoom

@@ -31,6 +31,7 @@ interface SidebarProps {
   onSelectAsset: (id: string | null) => void
   onDragStart: (asset: AssetDef) => void
   roomSlot?: ReactNode
+  rulesSlot?: ReactNode
 }
 
 export function Sidebar({
@@ -52,6 +53,7 @@ export function Sidebar({
   onSelectAsset,
   onDragStart,
   roomSlot,
+  rulesSlot,
 }: SidebarProps) {
   const q = search.trim().toLowerCase()
   const filtered = assets.filter((a) => {
@@ -76,6 +78,8 @@ export function Sidebar({
       </header>
 
       {roomSlot}
+
+      {rulesSlot}
 
       <div className={`board-size-control ${radiusEditable ? '' : 'disabled'}`}>
         <label htmlFor="board-radius">
