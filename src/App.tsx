@@ -5,6 +5,7 @@ import { RoomPanel } from './components/RoomPanel'
 import { PresenceToggle } from './components/PresenceToggle'
 import { ViewPresets } from './components/ViewPresets'
 import { MuteToggle } from './components/MuteToggle'
+import { NewBoardButton } from './components/NewBoardButton'
 import { RoomBackdrop } from './components/RoomBackdrop'
 import { RulesPackPanel } from './components/RulesPackPanel'
 import { Sidebar } from './components/Sidebar'
@@ -27,6 +28,11 @@ import {
   VIEW_PRESETS,
 } from './cameraViews'
 import { boardAudio, loadMuted } from './boardAudio'
+import {
+  ESTABLISHING_MS,
+  markEstablishingShotSeen,
+  shouldPlayEstablishingShot,
+} from './establishingShot'
 import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PlacedPiece } from './types'
 import { layerForCategory } from './types'
 import './App.css'
@@ -76,6 +82,14 @@ function App() {
   const [cameraView, setCameraView] = useState<CameraView>(() => loadCameraView())
   const [muted, setMuted] = useState(() => loadMuted())
   const [hexZoom, setHexZoom] = useState(() => VIEW_PRESETS[loadCameraView()].hexZoom)
+  /** Bite 6: room overview → table well on first load / New board. */
+  const [establishingPhase, setEstablishingPhase] = useState<
+    'overview' | 'arriving' | 'settled'
+  >(() => (shouldPlayEstablishingShot() ? 'overview' : 'settled'))
+  const [establishingShot, setEstablishingShot] = useState(() => ({
+    id: 0,
+    active: shouldPlayEstablishingShot(),
+  }))
 
   useEffect(() => {
     boardAudio.init()
@@ -104,12 +118,55 @@ function App() {
     setHexZoom(z)
   }, [])
 
+  // Paint overview, then ease into the table well. Deps are shot id/active only
+  // so flipping phase to "arriving" does not cancel the settle timeout.
+  useEffect(() => {
+    if (!establishingShot.active) return
+    let cancelled = false
+    let timeoutId: number | undefined
+    const raf1 = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        setEstablishingPhase('arriving')
+        timeoutId = window.setTimeout(() => {
+          if (cancelled) return
+          markEstablishingShotSeen()
+          setEstablishingPhase('settled')
+          setEstablishingShot((s) =>
+            s.id === establishingShot.id ? { ...s, active: false } : s,
+          )
+        }, ESTABLISHING_MS)
+      })
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf1)
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+    }
+  }, [establishingShot.id, establishingShot.active])
+
   const room = useRoom(urlJoin)
 
   const inRoom = room.inRoom
   const pieces = inRoom && room.remoteState ? room.remoteState.pieces : localPieces
   const mapRadius =
     inRoom && room.remoteState ? room.remoteState.mapRadius : localRadius
+
+  const onNewBoard = useCallback(() => {
+    if (inRoom) return
+    setLocalPieces([])
+    setSelectedPieceId(null)
+    setSelectedAssetId(null)
+    setLocalRadius(DEFAULT_RADIUS)
+    setHoverHex(null)
+    if (!shouldPlayEstablishingShot(true)) {
+      setEstablishingPhase('settled')
+      setEstablishingShot((s) => ({ id: s.id + 1, active: false }))
+      return
+    }
+    setEstablishingPhase('overview')
+    setEstablishingShot((s) => ({ id: s.id + 1, active: true }))
+  }, [inRoom])
 
   // Sync shareable URL when room changes
   useEffect(() => {
@@ -417,6 +474,10 @@ function App() {
         <PresenceToggle mode={roomMode} onChange={onRoomModeChange} />
         <ViewPresets view={cameraView} onChange={onCameraViewChange} />
         <MuteToggle muted={muted} onChange={onMuteChange} />
+        <NewBoardButton
+          disabled={inRoom || establishingPhase !== 'settled'}
+          onClick={onNewBoard}
+        />
         {loadError && (
           <div className="banner error">Failed to load assets: {loadError}</div>
         )}
@@ -438,35 +499,41 @@ function App() {
             scenes.
           </div>
         )}
-        <div className={`table-stage view-${cameraView}`}>
-          <div
-            className={`table-object view-${cameraView}`}
-            aria-label="Game table"
-            style={{
-              // Subtle CSS tilt + scale; Close still leaves a wood-rim strip in frame
-              transform: `rotateX(${VIEW_PRESETS[cameraView].rotateXDeg}deg) scale(${VIEW_PRESETS[cameraView].boardScale})`,
-            }}
-          >
-            <div className="table-well">
-              <HexBoard
-                key={cameraView}
-                mapRadius={mapRadius}
-                assetsById={assetsById}
-                pieces={pieces}
-                selectedPieceId={selectedPieceId}
-                selectedAssetId={selectedAssetId}
-                hoverHex={hoverHex}
-                clientId={room.clientId}
-                role={inRoom ? room.role : null}
-                inRoom={inRoom}
-                onHoverHex={setHoverHex}
-                onPlaceAt={onPlaceAt}
-                onSelectPiece={onSelectPiece}
-                onMovePiece={onMovePiece}
-                onDropAsset={placeAsset}
-                cameraView={cameraView}
-                onZoomChange={onHexZoomChange}
-              />
+        <div
+          className={`table-stage view-${cameraView}${
+            establishingPhase !== 'settled' ? ' is-establishing' : ''
+          }`}
+        >
+          <div className={`establishing-lens phase-${establishingPhase}`}>
+            <div
+              className={`table-object view-${cameraView}`}
+              aria-label="Game table"
+              style={{
+                // Subtle CSS tilt + scale; Close still leaves a wood-rim strip in frame
+                transform: `rotateX(${VIEW_PRESETS[cameraView].rotateXDeg}deg) scale(${VIEW_PRESETS[cameraView].boardScale})`,
+              }}
+            >
+              <div className="table-well">
+                <HexBoard
+                  key={cameraView}
+                  mapRadius={mapRadius}
+                  assetsById={assetsById}
+                  pieces={pieces}
+                  selectedPieceId={selectedPieceId}
+                  selectedAssetId={selectedAssetId}
+                  hoverHex={hoverHex}
+                  clientId={room.clientId}
+                  role={inRoom ? room.role : null}
+                  inRoom={inRoom}
+                  onHoverHex={setHoverHex}
+                  onPlaceAt={onPlaceAt}
+                  onSelectPiece={onSelectPiece}
+                  onMovePiece={onMovePiece}
+                  onDropAsset={placeAsset}
+                  cameraView={cameraView}
+                  onZoomChange={onHexZoomChange}
+                />
+              </div>
             </div>
           </div>
         </div>

@@ -614,6 +614,84 @@
   box-shadow: inset 0 0 0 1px rgba(255, 210, 140, 0.25);
 }
 
+
+/* Bite 6: establishing moment — room overview → table well */
+.establishing-lens {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: 50% 42%;
+  will-change: transform;
+}
+
+.establishing-lens.phase-overview {
+  transform: scale(0.48) translateY(6%);
+  transition: none;
+}
+
+.establishing-lens.phase-arriving {
+  transform: scale(1) translateY(0);
+  transition: transform 1200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.establishing-lens.phase-settled {
+  transform: none;
+  transition: none;
+}
+
+.table-stage.is-establishing .hex-board {
+  pointer-events: none;
+}
+
+.new-board-control {
+  position: absolute;
+  bottom: 12px;
+  left: 14px;
+  z-index: 6;
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(18, 16, 14, 0.72);
+  border: 1px solid rgba(90, 78, 60, 0.55);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.new-board-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #c8c0b0;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.new-board-btn:hover:not(:disabled) {
+  background: rgba(255, 220, 160, 0.08);
+  color: #f0e8d8;
+}
+
+.new-board-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .establishing-lens.phase-overview,
+  .establishing-lens.phase-arriving,
+  .establishing-lens.phase-settled {
+    transform: none;
+    transition: none;
+  }
+}
+
 .table-stage {
   flex: 1;
   min-height: 0;
@@ -817,6 +895,10 @@
   .mute-toggle {
     bottom: 48px;
     right: 8px;
+  }
+  .new-board-control {
+    bottom: 48px;
+    left: 8px;
   }
   .view-presets {
     top: 8px;

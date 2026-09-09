@@ -61,7 +61,7 @@ Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
 For a short CC-licensed one-pager to paste yourself while testing, see
 [Lasers & Feelings](https://johnharper.itch.io/lasers-feelings) (CC BY 4.0) — download/copy from the author; do not commit that text here.
 
-## Presence (Bite 1–5)
+## Presence (Bite 1–6)
 
 - **Table well:** hex board sits in a recessed felt well on a wood table object (drop shadow + rim)
 - **Room shell:** original CSS hobby-room backdrop (warm wall / soft shelves / lamp + window glow — not a Demeo clone)
@@ -69,10 +69,12 @@ For a short CC-licensed one-pager to paste yourself while testing, see
 - Toggle **Room / Dim room / Void** (persists in `localStorage`)
 - **Material tray:** sidebar restyled as a wood-edged felt piece tray with paper tabs/labels (categories, filters, rooms, rules folio, radius unchanged)
 - **Camera grammar:** preset views **Top-down / Slight tilt (default) / Close** with optional subtle CSS `rotateX`; pan + wheel zoom kept; zoom/scale limits leave a strip of table rim in frame (persists in `localStorage`)
+- **Foley + ambience:** place/move/delete one-shots + low room tone (mute persists); room tone crossfades slightly closer when zoomed in
+- **Establishing moment:** first load eases ~1.2s from room overview → table well; skipped on repeat visits (`localStorage`); **New board** clears the solo board and replays the arrival (respects reduced-motion)
 
 ## What works
 
-- **Presence:** table well + room/dim/void backdrop + material piece tray + camera view presets
+- **Presence:** table well + room/dim/void backdrop + material piece tray + camera view presets + foley/ambience + establishing arrival
 - **Multiplayer rooms:** Host/Join with short code; DM + players sync mapRadius + pieces over WebSocket
 - **Rules pack:** Paste/upload .txt/.md + license + rights checkbox; solo localStorage; DM syncs room pack to players (read-only)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
