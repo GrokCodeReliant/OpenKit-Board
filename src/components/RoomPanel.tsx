@@ -57,7 +57,7 @@ export function RoomPanel({
           </div>
         )}
         <button type="button" className="room-leave" onClick={onLeave}>
-          Leave room (solo offline)
+          Leave table (solo offline)
         </button>
       </div>
     )
@@ -65,7 +65,7 @@ export function RoomPanel({
 
   return (
     <div className="room-panel">
-      <p className="room-label">Multiplayer room</p>
+      <p className="room-label">Shared table</p>
       <div className="room-actions">
         <button
           type="button"
@@ -73,7 +73,7 @@ export function RoomPanel({
           onClick={onHost}
           disabled={status === 'connecting'}
         >
-          {status === 'connecting' ? 'Connecting…' : 'Host room'}
+          {status === 'connecting' ? 'Connecting…' : 'Host table'}
         </button>
       </div>
       <div className="room-join">
