@@ -34,6 +34,8 @@ interface HexBoardProps {
   cameraView: CameraView
   /** Optional live hex zoom for ambience crossfade (Bite 5). */
   onZoomChange?: (zoom: number) => void
+  /** Optional pan offset from board center for room parallax (Bite 8). */
+  onPanChange?: (offset: { x: number; y: number }) => void
 }
 
 export function HexBoard({
@@ -53,8 +55,10 @@ export function HexBoard({
   onDropAsset,
   cameraView,
   onZoomChange,
+  onPanChange,
 }: HexBoardProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
+  const didCenterRef = useRef(false)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(() => VIEW_PRESETS[cameraView].hexZoom)
   const [dragging, setDragging] = useState(false)
@@ -62,6 +66,20 @@ export function HexBoard({
   useEffect(() => {
     onZoomChange?.(zoom)
   }, [zoom, onZoomChange])
+
+  // Report pan offset from visual center so the room shell can parallax (Bite 8).
+  useEffect(() => {
+    if (!onPanChange || !didCenterRef.current) return
+    const el = wrapRef.current
+    if (!el) return
+    const { width, height } = el.getBoundingClientRect()
+    if (width < 1 || height < 1) return
+    onPanChange({
+      x: pan.x - width / 2,
+      y: pan.y - height / 2,
+    })
+  }, [pan, onPanChange])
+
   const dragRef = useRef<{
     mode: 'pan' | 'piece'
     startX: number
@@ -86,6 +104,7 @@ export function HexBoard({
     const el = wrapRef.current
     if (!el) return
     const { width, height } = el.getBoundingClientRect()
+    didCenterRef.current = true
     setPan({ x: width / 2, y: height / 2 })
   }, [])
 
@@ -303,6 +322,15 @@ export function HexBoard({
                   <path
                     d={hexPath(x, y, HEX_SIZE - 1)}
                     className="piece-select-ring"
+                  />
+                )}
+                {selected && piece.layer === 'object' && (
+                  <ellipse
+                    className="piece-contact-shadow"
+                    cx={x}
+                    cy={y + size * 0.38}
+                    rx={size * 0.34}
+                    ry={size * 0.13}
                   />
                 )}
                 <image
