@@ -1,4 +1,4 @@
-import type { AssetCategory, AssetDef, Manifest } from './types'
+import type { AssetCategory, AssetDef, LevelBand, Manifest, AssetTheme } from './types'
 
 /**
  * Category from Open Kit–style filename prefix:
@@ -23,7 +23,10 @@ export function displayNameFromFilename(filename: string): string {
     .join(' ')
 }
 
-/** Load assets from public/assets/manifest.json (samples by default). */
+const DEFAULT_THEMES: AssetTheme[] = ['fantasy']
+const DEFAULT_LEVELS: LevelBand[] = ['1-4', '5-10', '11-20']
+
+/** Load assets from public/assets/manifest.json (demo pack by default). */
 export async function loadAssetsFromManifest(
   manifestUrl = '/assets/manifest.json',
 ): Promise<AssetDef[]> {
@@ -42,12 +45,8 @@ export async function loadAssetsFromManifest(
       category,
       file: a.file,
       src: `${base}/${a.file}`,
+      themes: a.themes?.length ? a.themes : DEFAULT_THEMES,
+      levels: a.levels?.length ? a.levels : DEFAULT_LEVELS,
     }
   })
 }
-
-/**
- * Later: point at a real Open Kit `passed/` folder by serving that folder
- * (or copying PNGs into public/) and updating manifest.json basePath + assets
- * listed by filename prefixes (tile-/prop-/token-/monster-).
- */

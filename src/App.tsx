@@ -3,7 +3,7 @@ import { loadAssetsFromManifest } from './assets'
 import { HexBoard } from './components/HexBoard'
 import { Sidebar } from './components/Sidebar'
 import { generateHexMap, hexKey } from './hex'
-import type { AssetCategory, AssetDef, HexCoord, PlacedPiece } from './types'
+import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PlacedPiece } from './types'
 import { layerForCategory } from './types'
 import './App.css'
 
@@ -27,6 +27,8 @@ function App() {
   const [assets, setAssets] = useState<AssetDef[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [category, setCategory] = useState<AssetCategory>('tiles')
+  const [theme, setTheme] = useState<AssetTheme | 'all'>('all')
+  const [level, setLevel] = useState<LevelBand | 'all'>('all')
   const [search, setSearch] = useState('')
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [pieces, setPieces] = useState<PlacedPiece[]>([])
@@ -162,12 +164,22 @@ function App() {
       <Sidebar
         assets={assets}
         category={category}
+        theme={theme}
+        level={level}
         search={search}
         selectedAssetId={selectedAssetId}
         mapRadius={mapRadius}
         onMapRadiusChange={onMapRadiusChange}
         onCategoryChange={(c) => {
           setCategory(c)
+          setSelectedAssetId(null)
+        }}
+        onThemeChange={(t) => {
+          setTheme(t)
+          setSelectedAssetId(null)
+        }}
+        onLevelChange={(l) => {
+          setLevel(l)
           setSelectedAssetId(null)
         }}
         onSearchChange={setSearch}
@@ -182,7 +194,7 @@ function App() {
           <div className="banner error">Failed to load assets: {loadError}</div>
         )}
         {!loadError && assets.length === 0 && (
-          <div className="banner">Loading sample assets…</div>
+          <div className="banner">Loading demo assets…</div>
         )}
         {mapRadius >= 25 && (
           <div className="banner warn strong">

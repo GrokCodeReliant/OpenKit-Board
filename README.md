@@ -22,6 +22,8 @@ npm run preview
 
 ## What works
 
+- **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
+- **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story, no AI)
 - Pointy-top hex grid (axial coords) with pan + scroll zoom
 - Sidebar categories: Tiles | Props | Tokens | Monsters
 - Filter assets by name; thumbnail palette
@@ -31,13 +33,13 @@ npm run preview
 - Offline sample PNGs under public/assets/samples/ plus manifest.json
 - DM can set board radius (3–40); large maps warn about performance
 
-## Sample assets
+## Demo assets
 
 Filenames use Open Kit-style prefixes (tile-, prop-, token-, monster-).
-The loader reads the manifest and maps those prefixes to categories.
+The loader reads `public/assets/manifest.json` (tags: themes + level bands).
 
-Included: grass/stone/water/dirt; crate/barrel/tree/rock;
-guard/mage/rogue/cleric; goblin/orc/dragon/skeleton.
+Included demo pack (~18): fae grove tiles/props/tokens; heaven goldvein + lantern + acolyte;
+hell magma/grate + altar + imp/legionnaire; extraplanar dream mist/door/dreamwalker.
 
 ## Pointing at a real Open Kit passed/ folder
 
