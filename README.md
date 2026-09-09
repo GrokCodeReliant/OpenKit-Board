@@ -43,7 +43,9 @@ Open http://localhost:5173 in two browser tabs:
 2. Tab 2: enter the room code and **Join** as Player (or open `?room=CODE&role=player`).
 3. DM places a tile; player places a token and moves it; player cannot move the DM tile.
 
-Solo offline mode is unchanged when you are not in a room.
+Solo offline mode is the default. The UI shows **Solo — Host a room for multiplayer**
+until you Host/Join; brief WebSocket proxy flaps do not spam red errors. If you were
+already in a room, the client reconnects quietly.
 
 Optional: set `VITE_WS_URL` (e.g. `ws://localhost:3001`) to bypass the Vite proxy.
 
@@ -54,7 +56,8 @@ Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
 
 - Fields: title, license (free text), body, required rights acknowledgment
 - Solo: active pack in browser `localStorage` (works offline)
-- Sidebar **Active rules pack** panel for all roles (title, license, attribution, View)
+- Sidebar **Rules folio** panel for all roles (title, license, attribution)
+- **Open folio** opens a floating draggable window with the full scrollable pack body
 - Multiplayer: DM attaches/replaces/clears the room pack; it syncs over WebSocket; players are read-only
 - Late joiners receive the current room pack in `joined` / `state`
 
@@ -63,7 +66,9 @@ For a short CC-licensed one-pager to paste yourself while testing, see
 
 ## Piece sheet + pin library
 
-Select a placed piece to open an **index card** folio on the tray (display name, notes, optional freeform stats blob — no baked D&D columns).
+Select a placed piece to open a floating **index card** window over the table
+(display name, notes, optional freeform stats blob — no baked D&D columns). Drag by
+the title bar; multiple sheets can be open at once.
 
 - **Pin / Save** writes to browser `localStorage`, keyed by `assetId` so notes stick across boards
 - **Pinned library** lists thumb + title; open to edit; **Place** selects that asset for the board when allowed
@@ -72,11 +77,12 @@ Select a placed piece to open an **index card** folio on the tray (display name,
 
 ## Presence
 
-- **Table well:** hex board sits in a recessed felt well on a wood table object (drop shadow + rim)
+- **Table well:** hex board sits in a recessed felt well on a wood table object (drop shadow + rim); ~2× larger and top-biased on large screens, with a bottom band for floating cards
 - **Room shell:** original CSS hobby-room backdrop (warm wall / soft shelves / lamp + window glow — not a Demeo clone)
 - Heavy vignette keeps focus on the table
 - Toggle **Room / Dim room / Void** (persists in `localStorage`)
-- **Material tray:** sidebar restyled as a wood-edged felt piece tray with paper tabs/labels (categories, filters, rooms, rules folio, pin library, piece sheet, radius unchanged)
+- **Material tray:** sidebar restyled as a wood-edged felt piece tray with paper tabs/labels (categories, filters, rooms, rules folio, pin library, radius unchanged)
+- **Floating folios:** piece sheets + rules pack body open as draggable windows over the play area
 - **Camera:** flat top-down only — presets **Top-down (default) / Close** (zoom + table scale, no tilt); pan + wheel zoom kept; zoom/scale limits leave a strip of table rim in frame (persists in `localStorage`)
 - **Foley + ambience:** place/move/delete one-shots + low room tone (mute persists); room tone crossfades slightly closer when zoomed in
 - **Establishing moment:** first load eases ~1.2s from room overview → table well; skipped on repeat visits (`localStorage`); **New board** clears the solo board and replays the arrival (respects reduced-motion)

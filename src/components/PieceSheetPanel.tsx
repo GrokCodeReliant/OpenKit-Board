@@ -16,6 +16,8 @@ interface PieceSheetPanelProps {
   }) => void
   onUnpin: (assetId: string) => void
   onClose: () => void
+  /** When true, chrome close lives on the FloatingWindow — hide local ×. */
+  floating?: boolean
 }
 
 export function PieceSheetPanel({
@@ -25,6 +27,7 @@ export function PieceSheetPanel({
   onPin,
   onUnpin,
   onClose,
+  floating = false,
 }: PieceSheetPanelProps) {
   const defaultName = asset?.name || libraryEntry?.displayName || assetId
   const thumbSrc = asset?.src || libraryEntry?.thumbSrc
@@ -65,7 +68,11 @@ export function PieceSheetPanel({
   }
 
   return (
-    <div className="piece-sheet" role="dialog" aria-label="Piece sheet">
+    <div
+      className={`piece-sheet${floating ? ' piece-sheet-floating' : ''}`}
+      role={floating ? undefined : 'dialog'}
+      aria-label={floating ? undefined : 'Piece sheet'}
+    >
       <div className="piece-sheet-head">
         {thumbSrc ? (
           <img
@@ -88,14 +95,16 @@ export function PieceSheetPanel({
             {assetId}
           </p>
         </div>
-        <button
-          type="button"
-          className="piece-sheet-close"
-          onClick={onClose}
-          aria-label="Close piece sheet"
-        >
-          ×
-        </button>
+        {!floating && (
+          <button
+            type="button"
+            className="piece-sheet-close"
+            onClick={onClose}
+            aria-label="Close piece sheet"
+          >
+            ×
+          </button>
+        )}
       </div>
 
       <label className="rules-field">
@@ -133,7 +142,7 @@ export function PieceSheetPanel({
 
       <p className="piece-sheet-hint">
         Pin saves to your browser library (keyed by asset). Not shared over the
-        room.
+        room. Drag the title bar to move this card over the table.
       </p>
 
       <div className="rules-actions">

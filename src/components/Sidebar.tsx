@@ -33,7 +33,6 @@ interface SidebarProps {
   roomSlot?: ReactNode
   rulesSlot?: ReactNode
   librarySlot?: ReactNode
-  sheetSlot?: ReactNode
 }
 
 export function Sidebar({
@@ -57,7 +56,6 @@ export function Sidebar({
   roomSlot,
   rulesSlot,
   librarySlot,
-  sheetSlot,
 }: SidebarProps) {
   const q = search.trim().toLowerCase()
   const filtered = assets.filter((a) => {
@@ -88,8 +86,6 @@ export function Sidebar({
           {rulesSlot}
 
           {librarySlot}
-
-          {sheetSlot}
 
           <div className={`board-size-control ${radiusEditable ? '' : 'disabled'}`}>
             <label htmlFor="board-radius" className="paper-label">
@@ -233,8 +229,8 @@ export function Sidebar({
             </p>
             <p className="hint">
               {inRoom && role === 'player'
-                ? 'Move/delete only your tokens · Del removes · Select opens sheet'
-                : 'Select piece → sheet / move · Del removes · Pin notes locally'}
+                ? 'Move/delete only your tokens · Del removes · Select opens floating sheet'
+                : 'Select piece → floating sheet · Del removes · Pin notes locally'}
             </p>
           </footer>
         </div>
