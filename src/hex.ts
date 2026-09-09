@@ -1,79 +1,123 @@
 import type { HexCoord } from './types'
 
-/** Pointy-top hex size (center to vertex). */
-export const HEX_SIZE = 40
+/**
+ * Square checkerboard grid.
+ * WS / piece fields still use `q`,`r` — they mean column / row (square axes), not axial hex.
+ * Radius N → (2N+1)×(2N+1) map centered on (0,0).
+ */
 
-/** Pixel size of a hex cell (width / height). */
-export function hexWidth(size = HEX_SIZE): number {
-  return Math.sqrt(3) * size
+/** Full cell edge length in world pixels. */
+export const CELL_SIZE = 56
+
+/** @deprecated Prefer CELL_SIZE — kept for older call sites. */
+export const HEX_SIZE = CELL_SIZE
+
+export function cellWidth(size = CELL_SIZE): number {
+  return size
 }
 
-export function hexHeight(size = HEX_SIZE): number {
-  return 2 * size
+export function cellHeight(size = CELL_SIZE): number {
+  return size
 }
 
-/** Axial → pixel (pointy-top), origin at (0,0) hex center. */
-export function axialToPixel(q: number, r: number, size = HEX_SIZE): { x: number; y: number } {
-  const x = size * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r)
-  const y = size * ((3 / 2) * r)
-  return { x, y }
+/** Square col/row → pixel center at origin (0,0). */
+export function squareToPixel(
+  q: number,
+  r: number,
+  size = CELL_SIZE,
+): { x: number; y: number } {
+  return { x: q * size, y: r * size }
 }
 
-/** Pixel → axial (fractional), then round to nearest hex. */
-export function pixelToAxial(x: number, y: number, size = HEX_SIZE): HexCoord {
-  const q = ((Math.sqrt(3) / 3) * x - (1 / 3) * y) / size
-  const r = ((2 / 3) * y) / size
-  return axialRound(q, r)
+/** @deprecated Alias — q,r are square axes now. */
+export function axialToPixel(
+  q: number,
+  r: number,
+  size = CELL_SIZE,
+): { x: number; y: number } {
+  return squareToPixel(q, r, size)
 }
 
-export function axialRound(q: number, r: number): HexCoord {
-  const s = -q - r
-  let rq = Math.round(q)
-  let rr = Math.round(r)
-  const rs = Math.round(s)
-  const qDiff = Math.abs(rq - q)
-  const rDiff = Math.abs(rr - r)
-  const sDiff = Math.abs(rs - s)
-  if (qDiff > rDiff && qDiff > sDiff) {
-    rq = -rr - rs
-  } else if (rDiff > sDiff) {
-    rr = -rq - rs
+/** Pixel → nearest square cell. */
+export function pixelToSquare(
+  x: number,
+  y: number,
+  size = CELL_SIZE,
+): HexCoord {
+  return {
+    q: Math.round(x / size),
+    r: Math.round(y / size),
   }
-  return { q: rq, r: rr }
 }
 
-/** Six corner points of a pointy-top hex centered at (cx, cy). */
-export function hexCorners(cx: number, cy: number, size = HEX_SIZE): { x: number; y: number }[] {
-  const corners: { x: number; y: number }[] = []
-  for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 180) * (60 * i - 30)
-    corners.push({
-      x: cx + size * Math.cos(angle),
-      y: cy + size * Math.sin(angle),
-    })
-  }
-  return corners
+/** @deprecated Alias for pixelToSquare. */
+export function pixelToAxial(
+  x: number,
+  y: number,
+  size = CELL_SIZE,
+): HexCoord {
+  return pixelToSquare(x, y, size)
 }
 
-export function hexPath(cx: number, cy: number, size = HEX_SIZE): string {
-  return hexCorners(cx, cy, size)
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`)
-    .join(' ') + ' Z'
+/** SVG path for a square centered at (cx, cy). `half` is half-edge (inset OK). */
+export function squarePath(
+  cx: number,
+  cy: number,
+  half: number,
+): string {
+  const x0 = cx - half
+  const y0 = cy - half
+  const edge = half * 2
+  return `M${x0.toFixed(2)},${y0.toFixed(2)} h${edge.toFixed(2)} v${edge.toFixed(2)} h${(-edge).toFixed(2)} Z`
 }
 
-/** Generate a rectangular-ish map of axial coords covering |q|,|r| within range. */
-export function generateHexMap(radius: number): HexCoord[] {
+/** @deprecated Alias for squarePath with size treated as half-edge≈size/2. */
+export function hexPath(cx: number, cy: number, size = CELL_SIZE): string {
+  return squarePath(cx, cy, size / 2)
+}
+
+/** Radius N → (2N+1)² square map of integer q,r. */
+export function generateSquareMap(radius: number): HexCoord[] {
   const cells: HexCoord[] = []
   for (let q = -radius; q <= radius; q++) {
-    const r1 = Math.max(-radius, -q - radius)
-    const r2 = Math.min(radius, -q + radius)
-    for (let r = r1; r <= r2; r++) {
+    for (let r = -radius; r <= radius; r++) {
       cells.push({ q, r })
     }
   }
   return cells
 }
 
-export function hexKey(q: number, r: number): string {
+/** @deprecated Alias for generateSquareMap. */
+export function generateHexMap(radius: number): HexCoord[] {
+  return generateSquareMap(radius)
+}
+
+export function cellKey(q: number, r: number): string {
   return `${q},${r}`
+}
+
+/** @deprecated Alias for cellKey. */
+export function hexKey(q: number, r: number): string {
+  return cellKey(q, r)
+}
+
+/** Cell count for radius N: (2N+1)² */
+export function squareCount(radius: number): number {
+  const n = 2 * radius + 1
+  return n * n
+}
+
+/** World-space half-span from origin to outer cell edge (inclusive). */
+export function boardHalfExtent(radius: number, size = CELL_SIZE): number {
+  return (radius + 0.5) * size
+}
+
+/** Full board edge length in world pixels. */
+export function boardExtent(radius: number, size = CELL_SIZE): number {
+  return (2 * radius + 1) * size
+}
+
+/** Whether (q,r) lies on the square map of the given radius. */
+export function inSquareMap(q: number, r: number, radius: number): boolean {
+  return Math.abs(q) <= radius && Math.abs(r) <= radius
 }

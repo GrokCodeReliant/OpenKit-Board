@@ -1,6 +1,7 @@
 /**
  * Open Kit Board — multiplayer room server (MVP).
  * In-memory rooms; WebSocket sync for mapRadius + pieces + rules pack.
+ * Board is a square checkerboard: piece q,r are column/row; radius N → (2N+1)² cells.
  * Run: npm run server  (default port 3001)
  */
 import { createServer } from 'node:http'
@@ -297,15 +298,10 @@ wss.on('connection', (ws) => {
         return
       }
       room.mapRadius = clampRadius(Number(msg.radius))
-      // Drop pieces outside map when radius shrinks (same formula as client)
+      // Drop pieces outside square map when radius shrinks (same as client: |q|,|r| <= R)
       const r = room.mapRadius
       room.pieces = room.pieces.filter((p) => {
-        const s = -p.q - p.r
-        return (
-          Math.abs(p.q) <= r &&
-          Math.abs(p.r) <= r &&
-          Math.abs(s) <= r
-        )
+        return Math.abs(p.q) <= r && Math.abs(p.r) <= r
       })
       broadcast(room, { type: 'state', state: roomState(room) })
       return
@@ -320,6 +316,10 @@ wss.on('connection', (ws) => {
       const layer = category === 'tiles' ? 'ground' : 'object'
       if (!assetId || !Number.isFinite(q) || !Number.isFinite(r)) {
         send(ws, { type: 'error', message: 'Invalid place payload' })
+        return
+      }
+      if (Math.abs(q) > room.mapRadius || Math.abs(r) > room.mapRadius) {
+        send(ws, { type: 'error', message: 'Place outside board' })
         return
       }
       if (!canPlace(meta.role, category)) {
@@ -362,6 +362,10 @@ wss.on('connection', (ws) => {
       }
       if (!Number.isFinite(q) || !Number.isFinite(r)) {
         send(ws, { type: 'error', message: 'Invalid move' })
+        return
+      }
+      if (Math.abs(q) > room.mapRadius || Math.abs(r) > room.mapRadius) {
+        send(ws, { type: 'error', message: 'Move outside board' })
         return
       }
       room.pieces = room.pieces.filter(

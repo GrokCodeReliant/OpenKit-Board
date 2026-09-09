@@ -280,8 +280,8 @@
   background: radial-gradient(ellipse at center, #1c2028 0%, #080a0d 78%);
   align-items: stretch;
   justify-content: stretch;
-  /* Thin top chrome strip; modest L/R; large bottom band for floating folios */
-  padding: 10px 28px 200px;
+  /* Ultra-thin top chrome strip; modest L/R; large bottom band for floating folios */
+  padding: 2px 28px 210px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -622,14 +622,14 @@
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* board sits high; bottom band left for floating cards */
   justify-content: center;
-  transform-origin: 50% 42%;
+  transform-origin: 50% 28%;
   will-change: transform;
 }
 
 .establishing-lens.phase-overview {
-  transform: scale(0.48) translateY(6%);
+  transform: scale(0.48) translateY(10%);
   transition: none;
 }
 
@@ -699,12 +699,12 @@
   min-height: 0;
   width: 100%;
   display: flex;
-  align-items: flex-start; /* top-biased — board near top of play area */
+  align-items: flex-start; /* top-biased — thin status strip only above */
   justify-content: center;
   position: relative;
   z-index: 2;
   overflow: hidden;
-  padding-top: 4px;
+  padding-top: 0;
 }
 
 /* Outer table surface: wood rim + soft drop shadow */
@@ -720,7 +720,7 @@
   border-radius: 30px;
   padding: 28px;
   box-sizing: border-box;
-  transform-origin: 50% 55%;
+  transform-origin: 50% 35%;
   will-change: transform;
   transition: transform 280ms ease;
   background:
@@ -996,13 +996,24 @@
   height: 100%;
 }
 
-.hex-cell {
+.hex-cell,
+.square-cell {
   fill: #1a221e;
   stroke: #3a4a42;
-  stroke-width: 1.25;
+  stroke-width: 1;
 }
 
-.hex-cell.hover {
+/* Subtle D&D checkerboard tint */
+.square-cell.check-a {
+  fill: #1c2620;
+}
+
+.square-cell.check-b {
+  fill: #15201a;
+}
+
+.hex-cell.hover,
+.square-cell.hover {
   fill: #2a3a32;
   stroke: #6a8fc0;
 }
@@ -1054,7 +1065,7 @@
     border-radius: 14px 14px 0 0;
   }
   .main {
-    padding: 8px 10px 120px;
+    padding: 2px 10px 120px;
   }
   .presence-toggle {
     top: auto;

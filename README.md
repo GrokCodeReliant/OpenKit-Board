@@ -1,6 +1,6 @@
 # Open Kit Board
 
-Digital pointy-top hex game board for Open Kit D&D-style PNG assets.
+Digital square checkerboard game board for Open Kit D&D-style PNG assets.
 
 MVP only: no AI. Ollama and paid LLM are future stretch and are NOT built.
 
@@ -77,13 +77,13 @@ the title bar; multiple sheets can be open at once.
 
 ## Presence
 
-- **Table well:** hex board sits in a recessed felt well on a wood table object (drop shadow + rim); ~2× larger and top-biased on large screens, with a bottom band for floating cards
+- **Table well:** square checkerboard sits in a recessed felt well on a wood table object (drop shadow + rim); ~2× larger and pushed high on large screens (thin status strip only), with a bottom band for floating cards
 - **Room shell:** original CSS hobby-room backdrop (warm wall / soft shelves / lamp + window glow — not a Demeo clone)
 - Heavy vignette keeps focus on the table
 - Toggle **Room / Dim room / Void** (persists in `localStorage`)
 - **Material tray:** sidebar restyled as a wood-edged felt piece tray with paper tabs/labels (categories, filters, rooms, rules folio, pin library, radius unchanged)
 - **Floating folios:** piece sheets + rules pack body open as draggable windows over the play area
-- **Camera:** flat top-down only — presets **Top-down (default) / Close** (zoom + table scale, no tilt); pan + wheel zoom kept; zoom/scale limits leave a strip of table rim in frame (persists in `localStorage`)
+- **Camera:** flat top-down only — presets **Top-down (default) / Close** (zoom + table scale, no tilt); pan + wheel zoom kept; min zoom fits the **entire** board (including radius 40); zoom/scale limits leave a strip of table rim in frame (persists in `localStorage`)
 - **Foley + ambience:** place/move/delete one-shots + low room tone (mute persists); room tone crossfades slightly closer when zoomed in
 - **Establishing moment:** first load eases ~1.2s from room overview → table well; skipped on repeat visits (`localStorage`); **New board** clears the solo board and replays the arrival (respects reduced-motion)
 - **Seat pads:** four decorative empty seat mats around the table rim (silhouettes/tokens); local near seat marked **You** — no networking
@@ -97,14 +97,14 @@ the title bar; multiple sheets can be open at once.
 - **Piece sheet / pin library:** Select piece → index-card notes + freeform stats; pin by assetId in localStorage; library tray list/edit/place (local only, no WS)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story, no AI)
-- Pointy-top hex grid (axial coords) with pan + scroll zoom + top-down zoom presets
+- Square checkerboard grid (`q`,`r` = column/row) with pan + scroll zoom + top-down zoom presets; zoom-out fits the whole map
 - Sidebar categories: Tiles | Props | Tokens | Monsters
 - Filter assets by name; thumbnail palette
-- Drag an asset onto a hex, or click an asset then click a hex
+- Drag an asset onto a cell, or click an asset then click a cell
 - Select placed pieces, drag to move; Delete / Backspace removes
 - Tiles render as a ground layer under props / tokens / monsters
 - Offline sample PNGs under public/assets/samples/ plus manifest.json
-- DM can set board radius (3–40); large maps warn about performance
+- DM can set board radius (3–40) → `(2r+1)²` cells; large maps warn about performance
 
 ## Demo assets
 
@@ -125,13 +125,23 @@ hell magma/grate + altar + imp/legionnaire; extraplanar dream mist/door/dreamwal
 
 See categoryFromFilename() in src/assets.ts for prefix rules.
 
+
+## Grid coordinates
+
+Classic D&D **square checkerboard** (not hex). Open Kit PNG tiles are rectangular, so path/gate art meets edge-to-edge on squares.
+
+- Piece / WS fields `q` and `r` mean **column** and **row** (square axes). Keeping these names avoids breaking the room protocol.
+- Board **radius** `N` is half-span from center: the map is `(2N+1)×(2N+1)` cells centered on `(0,0)`.
+- Subtle alternating cell tint marks the checkers pattern.
+- Wheel zoom-out is clamped to a **fit-to-view** floor so every cell stays visible (including radius 40).
+
 ## Controls
 
 | Action | How |
 |--------|-----|
-| Place | Drag from palette onto hex, or click asset then click hex |
+| Place | Drag from palette onto a cell, or click asset then click cell |
 | Select piece | Click piece on board |
-| Move | Drag piece to another hex |
+| Move | Drag piece to another cell |
 | Delete | Select piece, press Delete or Backspace |
 | Clear selection | Escape |
 | Pan | Drag empty board (or Alt / middle / right drag) |
@@ -139,7 +149,7 @@ See categoryFromFilename() in src/assets.ts for prefix rules.
 
 ## Stack
 
-Vite + React + TypeScript client; small Node `ws` room server in `server/`. Hex math is simple axial (pointy-top). SVG board.
+Vite + React + TypeScript client; small Node `ws` room server in `server/`. Square grid math (`q`,`r` column/row; radius N → `(2N+1)²`). SVG board.
 
 ## License / assets
 

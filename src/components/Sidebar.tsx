@@ -7,9 +7,10 @@ import { CATEGORIES, LEVEL_BANDS, THEMES } from '../types'
 const MIN_RADIUS = 3
 const MAX_RADIUS = 40
 
-/** Hexagon cell count for axial radius r: 3*r*(r+1)+1 */
-function hexCount(radius: number): number {
-  return 3 * radius * (radius + 1) + 1
+/** Square map cell count for radius r: (2r+1)² */
+function squareCount(radius: number): number {
+  const n = 2 * radius + 1
+  return n * n
 }
 
 interface SidebarProps {
@@ -114,7 +115,7 @@ export function Sidebar({
               />
             </div>
             <p className="board-size-meta">
-              ~{hexCount(mapRadius)} hexes (3×r×(r+1)+1)
+              ~{squareCount(mapRadius)} cells ((2r+1)² square)
             </p>
           </div>
 
@@ -197,7 +198,7 @@ export function Sidebar({
                   disabled={!allowed}
                   title={
                     allowed
-                      ? `${asset.name} — drag onto a hex, or click then click a hex`
+                      ? `${asset.name} — drag onto a cell, or click then click a cell`
                       : 'Players may only place tokens'
                   }
                   onClick={() => {
@@ -224,8 +225,8 @@ export function Sidebar({
           <footer className="sidebar-footer">
             <p>
               {selectedAssetId
-                ? 'Click a hex to place. Esc to clear.'
-                : 'Drag onto hex, or click piece then hex.'}
+                ? 'Click a cell to place. Esc to clear.'
+                : 'Drag onto a cell, or click piece then cell.'}
             </p>
             <p className="hint">
               {inRoom && role === 'player'
