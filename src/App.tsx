@@ -4,6 +4,7 @@ import { HexBoard } from './components/HexBoard'
 import { RoomPanel } from './components/RoomPanel'
 import { PresenceToggle } from './components/PresenceToggle'
 import { ViewPresets } from './components/ViewPresets'
+import { MuteToggle } from './components/MuteToggle'
 import { RoomBackdrop } from './components/RoomBackdrop'
 import { RulesPackPanel } from './components/RulesPackPanel'
 import { Sidebar } from './components/Sidebar'
@@ -25,6 +26,7 @@ import {
   saveCameraView,
   VIEW_PRESETS,
 } from './cameraViews'
+import { boardAudio, loadMuted } from './boardAudio'
 import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PlacedPiece } from './types'
 import { layerForCategory } from './types'
 import './App.css'
@@ -72,6 +74,16 @@ function App() {
   )
   const [roomMode, setRoomMode] = useState<RoomMode>(() => loadRoomMode())
   const [cameraView, setCameraView] = useState<CameraView>(() => loadCameraView())
+  const [muted, setMuted] = useState(() => loadMuted())
+  const [hexZoom, setHexZoom] = useState(() => VIEW_PRESETS[loadCameraView()].hexZoom)
+
+  useEffect(() => {
+    boardAudio.init()
+  }, [])
+
+  useEffect(() => {
+    boardAudio.syncFromView(cameraView, hexZoom)
+  }, [cameraView, hexZoom])
 
   const onRoomModeChange = useCallback((mode: RoomMode) => {
     setRoomMode(mode)
@@ -81,6 +93,15 @@ function App() {
   const onCameraViewChange = useCallback((view: CameraView) => {
     setCameraView(view)
     saveCameraView(view)
+  }, [])
+
+  const onMuteChange = useCallback((next: boolean) => {
+    setMuted(next)
+    boardAudio.setMuted(next)
+  }, [])
+
+  const onHexZoomChange = useCallback((z: number) => {
+    setHexZoom(z)
   }, [])
 
   const room = useRoom(urlJoin)
@@ -160,6 +181,8 @@ function App() {
       if (!asset) return
       if (!canPlaceCategory(room.role, inRoom, asset.category)) return
 
+      boardAudio.playPlace()
+
       if (inRoom) {
         room.place(assetId, q, r, asset.category)
         setSelectedPieceId(null)
@@ -203,6 +226,9 @@ function App() {
       if (!validKeys.has(hexKey(q, r))) return
       const moving = pieces.find((p) => p.id === id)
       if (!canControlPiece(room.role, inRoom, room.clientId, moving)) return
+      if (moving && moving.q === q && moving.r === r) return
+
+      boardAudio.playMove()
 
       if (inRoom) {
         room.move(id, q, r)
@@ -255,6 +281,7 @@ function App() {
         const piece = pieces.find((p) => p.id === selectedPieceId)
         if (!canControlPiece(room.role, inRoom, room.clientId, piece)) return
         e.preventDefault()
+        boardAudio.playDelete()
         if (inRoom) {
           room.deletePiece(selectedPieceId)
         } else {
@@ -389,6 +416,7 @@ function App() {
         <div className="room-vignette" aria-hidden="true" />
         <PresenceToggle mode={roomMode} onChange={onRoomModeChange} />
         <ViewPresets view={cameraView} onChange={onCameraViewChange} />
+        <MuteToggle muted={muted} onChange={onMuteChange} />
         {loadError && (
           <div className="banner error">Failed to load assets: {loadError}</div>
         )}
@@ -437,6 +465,7 @@ function App() {
                 onMovePiece={onMovePiece}
                 onDropAsset={placeAsset}
                 cameraView={cameraView}
+                onZoomChange={onHexZoomChange}
               />
             </div>
           </div>

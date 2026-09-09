@@ -533,6 +533,47 @@
   box-shadow: inset 0 0 0 1px rgba(255, 210, 140, 0.25);
 }
 
+
+/* Bite 5: mute control for foley + ambience */
+.mute-toggle {
+  position: absolute;
+  bottom: 12px;
+  right: 14px;
+  z-index: 6;
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(18, 16, 14, 0.72);
+  border: 1px solid rgba(90, 78, 60, 0.55);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.mute-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #c8c0b0;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mute-btn:hover {
+  background: rgba(255, 220, 160, 0.08);
+  color: #f0e8d8;
+}
+
+.mute-btn.active {
+  background: rgba(70, 55, 40, 0.9);
+  color: #f0d8b0;
+  box-shadow: inset 0 0 0 1px rgba(255, 210, 140, 0.2);
+}
+
 /* Bite 4: camera preset views */
 .view-presets {
   position: absolute;
@@ -772,6 +813,10 @@
     right: 8px;
     left: 8px;
     justify-content: center;
+  }
+  .mute-toggle {
+    bottom: 48px;
+    right: 8px;
   }
   .view-presets {
     top: 8px;
