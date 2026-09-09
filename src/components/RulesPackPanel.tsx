@@ -22,6 +22,10 @@ interface RulesPackPanelProps {
   readOnly?: boolean
   /** When true, attach syncs to the multiplayer room. */
   inRoom?: boolean
+  /** Open the full pack body in a floating folio window. */
+  onOpenFolio?: () => void
+  /** Whether the floating folio is currently open. */
+  folioOpen?: boolean
   onAttach: (pack: RulesPack) => void
   onClear: () => void
 }
@@ -31,11 +35,12 @@ export function RulesPackPanel({
   importedBy,
   readOnly = false,
   inRoom = false,
+  onOpenFolio,
+  folioOpen = false,
   onAttach,
   onClear,
 }: RulesPackPanelProps) {
   const [importing, setImporting] = useState(false)
-  const [viewOpen, setViewOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [license, setLicense] = useState('')
   const [body, setBody] = useState('')
@@ -72,7 +77,6 @@ export function RulesPackPanel({
     }
     setRightsOk(false)
     setImporting(true)
-    setViewOpen(false)
   }
 
   const onFile = async (file: File | null) => {
@@ -349,18 +353,13 @@ export function RulesPackPanel({
         {pack.body.length.toLocaleString()} chars · {pack.format}
       </p>
       <p className="rules-preview">{truncateBody(pack.body)}</p>
-      {viewOpen && (
-        <pre className="rules-view" tabIndex={0}>
-          {pack.body}
-        </pre>
-      )}
       <div className="rules-actions">
         <button
           type="button"
-          className="rules-secondary"
-          onClick={() => setViewOpen((v) => !v)}
+          className="rules-primary"
+          onClick={() => onOpenFolio?.()}
         >
-          {viewOpen ? 'Hide' : 'View'}
+          {folioOpen ? 'Folio open' : 'Open folio'}
         </button>
         {!readOnly && (
           <>
@@ -375,7 +374,6 @@ export function RulesPackPanel({
               type="button"
               className="rules-danger"
               onClick={() => {
-                setViewOpen(false)
                 onClear()
               }}
             >

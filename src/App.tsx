@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadAssetsFromManifest } from './assets'
 import { HexBoard } from './components/HexBoard'
 import { RoomPanel } from './components/RoomPanel'
@@ -11,6 +11,8 @@ import { RoomBackdrop } from './components/RoomBackdrop'
 import { RulesPackPanel } from './components/RulesPackPanel'
 import { PieceSheetPanel } from './components/PieceSheetPanel'
 import { LibraryTray } from './components/LibraryTray'
+import { FloatingWindow } from './components/FloatingWindow'
+import { RulesFolioWindow } from './components/RulesFolioWindow'
 import { Sidebar } from './components/Sidebar'
 import { generateHexMap, hexKey } from './hex'
 import type { Role } from './multiplayer/protocol'
@@ -82,8 +84,13 @@ function App() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [localPieces, setLocalPieces] = useState<PlacedPiece[]>([])
   const [selectedPieceId, setSelectedPieceId] = useState<string | null>(null)
-  /** Asset whose index-card sheet is open (board select or library edit). */
-  const [sheetAssetId, setSheetAssetId] = useState<string | null>(null)
+  /** Open floating piece sheets (asset ids). Multiple OK. */
+  const [openSheetIds, setOpenSheetIds] = useState<string[]>([])
+  /** Z-order focus counter for floating windows. */
+  const floatZRef = useRef(20)
+  const [sheetZ, setSheetZ] = useState<Record<string, number>>({})
+  const [rulesFolioOpen, setRulesFolioOpen] = useState(false)
+  const [rulesFolioZ, setRulesFolioZ] = useState(20)
   const [pieceLibrary, setPieceLibrary] = useState<PieceLibraryMap>(() =>
     loadPieceLibrary(),
   )
@@ -172,7 +179,8 @@ function App() {
     setLocalPieces([])
     setSelectedPieceId(null)
     setSelectedAssetId(null)
-    setSheetAssetId(null)
+    setOpenSheetIds([])
+    setRulesFolioOpen(false)
     setLocalRadius(DEFAULT_RADIUS)
     setHoverHex(null)
     if (!shouldPlayEstablishingShot(true)) {
@@ -322,21 +330,37 @@ function App() {
     [validKeys, pieces, inRoom, room],
   )
 
+  const focusSheet = useCallback((assetId: string) => {
+    floatZRef.current += 1
+    const next = floatZRef.current
+    setSheetZ((m) => ({ ...m, [assetId]: next }))
+  }, [])
+
+  const openPieceSheet = useCallback(
+    (assetId: string) => {
+      setOpenSheetIds((prev) =>
+        prev.includes(assetId) ? prev : [...prev, assetId],
+      )
+      focusSheet(assetId)
+    },
+    [focusSheet],
+  )
+
+  const closePieceSheet = useCallback((assetId: string) => {
+    setOpenSheetIds((prev) => prev.filter((id) => id !== assetId))
+  }, [])
+
   const onSelectPiece = useCallback(
     (id: string | null) => {
       setSelectedPieceId(id)
       if (id) {
         setSelectedAssetId(null)
         const piece = pieces.find((p) => p.id === id)
-        if (piece) setSheetAssetId(piece.assetId)
+        if (piece) openPieceSheet(piece.assetId)
       }
     },
-    [pieces],
+    [pieces, openPieceSheet],
   )
-
-  const closePieceSheet = useCallback(() => {
-    setSheetAssetId(null)
-  }, [])
 
   const onPinLibraryEntry = useCallback(
     (entry: {
@@ -355,11 +379,14 @@ function App() {
     setPieceLibrary((prev) => removeLibraryEntry(prev, assetId))
   }, [])
 
-  const onOpenLibrarySheet = useCallback((assetId: string) => {
-    setSheetAssetId(assetId)
-    setSelectedPieceId(null)
-    setSelectedAssetId(null)
-  }, [])
+  const onOpenLibrarySheet = useCallback(
+    (assetId: string) => {
+      openPieceSheet(assetId)
+      setSelectedPieceId(null)
+      setSelectedAssetId(null)
+    },
+    [openPieceSheet],
+  )
 
   const onPlaceFromLibrary = useCallback(
     (assetId: string) => {
@@ -392,7 +419,6 @@ function App() {
       if (e.key === 'Escape') {
         setSelectedAssetId(null)
         setSelectedPieceId(null)
-        setSheetAssetId(null)
         return
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -504,7 +530,6 @@ function App() {
           }
           setSelectedAssetId(id)
           setSelectedPieceId(null)
-          if (id) setSheetAssetId(null)
         }}
         onDragStart={(asset) => {
           if (!canPlaceCategory(room.role, inRoom, asset.category)) return
@@ -528,8 +553,18 @@ function App() {
             importedBy={room.clientId || 'local'}
             readOnly={rulesReadOnly}
             inRoom={inRoom}
+            folioOpen={rulesFolioOpen}
+            onOpenFolio={() => {
+              if (!displayRulesPack) return
+              setRulesFolioOpen(true)
+              floatZRef.current += 1
+              setRulesFolioZ(floatZRef.current)
+            }}
             onAttach={onAttachRulesPack}
-            onClear={onClearRulesPack}
+            onClear={() => {
+              setRulesFolioOpen(false)
+              onClearRulesPack()
+            }}
           />
         }
         librarySlot={
@@ -541,18 +576,6 @@ function App() {
             onOpenSheet={onOpenLibrarySheet}
             onPlace={onPlaceFromLibrary}
           />
-        }
-        sheetSlot={
-          sheetAssetId ? (
-            <PieceSheetPanel
-              assetId={sheetAssetId}
-              asset={assetsById.get(sheetAssetId) ?? null}
-              libraryEntry={getLibraryEntry(pieceLibrary, sheetAssetId)}
-              onPin={onPinLibraryEntry}
-              onUnpin={onUnpinLibraryEntry}
-              onClose={closePieceSheet}
-            />
-          ) : null
         }
       />
       <main className={`main room-mode-${roomMode}`}>
@@ -571,9 +594,7 @@ function App() {
         {!loadError && assets.length === 0 && (
           <div className="banner">Loading demo assets…</div>
         )}
-        {room.lastError && room.status === 'error' && (
-          <div className="banner error">{room.lastError}</div>
-        )}
+        {/* Soft solo: no red WebSocket banner for idle / brief flaps. */}
         {mapRadius >= 25 && (
           <div className="banner warn strong">
             Very large board (radius {mapRadius}, ~{cellCount} hexes) — expect
@@ -624,6 +645,59 @@ function App() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="floating-layer" aria-label="Floating folios">
+          {openSheetIds.map((assetId, i) => {
+            const entry = getLibraryEntry(pieceLibrary, assetId)
+            const asset = assetsById.get(assetId) ?? null
+            const title =
+              entry?.displayName || asset?.name || 'Index card'
+            return (
+              <FloatingWindow
+                key={assetId}
+                title={title}
+                ariaLabel={`Piece sheet: ${title}`}
+                className="floating-piece-sheet"
+                initialX={48 + (i % 4) * 36}
+                initialY={56 + (i % 4) * 28}
+                width={360}
+                maxHeight={560}
+                zIndex={sheetZ[assetId] ?? 20 + i}
+                onFocus={() => focusSheet(assetId)}
+                onClose={() => closePieceSheet(assetId)}
+              >
+                <PieceSheetPanel
+                  assetId={assetId}
+                  asset={asset}
+                  libraryEntry={entry}
+                  onPin={onPinLibraryEntry}
+                  onUnpin={onUnpinLibraryEntry}
+                  onClose={() => closePieceSheet(assetId)}
+                  floating
+                />
+              </FloatingWindow>
+            )
+          })}
+          {rulesFolioOpen && displayRulesPack && (
+            <FloatingWindow
+              title={displayRulesPack.title || 'Rules folio'}
+              ariaLabel="Rules folio"
+              className="floating-rules-folio"
+              initialX={420}
+              initialY={48}
+              width={420}
+              maxHeight={640}
+              zIndex={rulesFolioZ}
+              onFocus={() => {
+                floatZRef.current += 1
+                setRulesFolioZ(floatZRef.current)
+              }}
+              onClose={() => setRulesFolioOpen(false)}
+            >
+              <RulesFolioWindow pack={displayRulesPack} />
+            </FloatingWindow>
+          )}
         </div>
       </main>
     </div>

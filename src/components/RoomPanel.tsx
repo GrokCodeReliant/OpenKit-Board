@@ -40,15 +40,27 @@ export function RoomPanel({
     }
   }
 
-  if (status === 'connected' && roomCode) {
+  if ((status === 'connected' || status === 'reconnecting') && roomCode) {
     return (
-      <div className="room-panel connected">
+      <div
+        className={`room-panel connected${status === 'reconnecting' ? ' reconnecting' : ''}`}
+      >
         <div className="room-row">
           <span className="room-badge">{role === 'dm' ? 'DM' : 'Player'}</span>
           <strong className="room-code">{roomCode}</strong>
-          <span className="room-peers">{peerCount} connected</span>
+          <span className="room-peers">
+            {status === 'reconnecting'
+              ? 'Reconnecting…'
+              : `${peerCount} connected`}
+          </span>
         </div>
-        {shareUrl && (
+        {status === 'reconnecting' && (
+          <p className="room-status soft">
+            Connection hiccup — rejoining quietly. Keep playing locally until it
+            settles.
+          </p>
+        )}
+        {shareUrl && status === 'connected' && (
           <div className="room-share">
             <input readOnly value={shareUrl} aria-label="Shareable room URL" />
             <button type="button" onClick={copyShare}>
@@ -63,17 +75,27 @@ export function RoomPanel({
     )
   }
 
+  const busy = status === 'connecting'
+  const showError = status === 'error' && lastError
+
   return (
-    <div className="room-panel">
+    <div className={`room-panel${status === 'error' ? ' soft-error' : ''}`}>
       <p className="room-label">Shared table</p>
+      <p className="room-status solo" role="status">
+        {busy
+          ? 'Connecting to room server…'
+          : status === 'error'
+            ? 'Solo — room server unreachable'
+            : 'Solo — Host a room for multiplayer'}
+      </p>
       <div className="room-actions">
         <button
           type="button"
           className="room-host"
           onClick={onHost}
-          disabled={status === 'connecting'}
+          disabled={busy}
         >
-          {status === 'connecting' ? 'Connecting…' : 'Host table'}
+          {busy ? 'Connecting…' : 'Host table'}
         </button>
       </div>
       <div className="room-join">
@@ -95,14 +117,17 @@ export function RoomPanel({
         </select>
         <button
           type="button"
-          disabled={!codeInput.trim() || status === 'connecting'}
+          disabled={!codeInput.trim() || busy}
           onClick={() => onJoin(codeInput.trim(), joinRole)}
         >
           Join
         </button>
       </div>
-      {lastError && <p className="room-error">{lastError}</p>}
-      <p className="room-hint">Offline solo works without a room.</p>
+      {showError && <p className="room-error soft">{lastError}</p>}
+      <p className="room-hint">
+        Offline solo is normal. Host/Join only when you want a shared table
+        (`npm run server` on :3001).
+      </p>
     </div>
   )
 }

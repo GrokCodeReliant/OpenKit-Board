@@ -24,8 +24,8 @@ export interface ViewPreset {
 }
 
 export const VIEW_PRESETS: Record<CameraView, ViewPreset> = {
-  top: { hexZoom: 0.85, boardScale: 0.9 },
-  close: { hexZoom: 1.35, boardScale: 1.08 },
+  top: { hexZoom: 0.85, boardScale: 0.98 },
+  close: { hexZoom: 1.35, boardScale: 1.06 },
 }
 
 const STORAGE_KEY = 'openkit-board-camera-view'
