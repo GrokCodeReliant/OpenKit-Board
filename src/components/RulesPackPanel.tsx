@@ -12,9 +12,16 @@ import {
 const RIGHTS_LABEL =
   'I affirm that I have the right to use this text in this private session (I wrote it, I own it, or its license allows my use). Open Kit Board will not redistribute this pack for me.'
 
+/** Link-only sample — never vendor pack body in the repo. */
+const SAMPLE_HELP_URL = 'https://johnharper.itch.io/lasers-feelings'
+
 interface RulesPackPanelProps {
   pack: RulesPack | null
   importedBy: string
+  /** Players / non-DM room peers: view only. */
+  readOnly?: boolean
+  /** When true, attach syncs to the multiplayer room. */
+  inRoom?: boolean
   onAttach: (pack: RulesPack) => void
   onClear: () => void
 }
@@ -22,6 +29,8 @@ interface RulesPackPanelProps {
 export function RulesPackPanel({
   pack,
   importedBy,
+  readOnly = false,
+  inRoom = false,
   onAttach,
   onClear,
 }: RulesPackPanelProps) {
@@ -51,6 +60,7 @@ export function RulesPackPanel({
   }
 
   const openImport = (replace: boolean) => {
+    if (readOnly) return
     if (replace && pack) {
       setTitle(pack.title)
       setLicense(pack.license)
@@ -102,7 +112,7 @@ export function RulesPackPanel({
     !busy
 
   const onSave = async () => {
-    if (!canSave) return
+    if (!canSave || readOnly) return
     setBusy(true)
     setError(null)
     try {
@@ -125,7 +135,7 @@ export function RulesPackPanel({
     }
   }
 
-  if (importing) {
+  if (importing && !readOnly) {
     const softWarn = body.length >= BODY_SOFT_LIMIT
     return (
       <div className="rules-panel">
@@ -223,7 +233,11 @@ export function RulesPackPanel({
             disabled={!canSave}
             onClick={() => void onSave()}
           >
-            {busy ? 'Saving…' : 'Attach to session'}
+            {busy
+              ? 'Saving…'
+              : inRoom
+                ? 'Attach to room'
+                : 'Attach to session'}
           </button>
           <button
             type="button"
@@ -243,25 +257,46 @@ export function RulesPackPanel({
   if (!pack) {
     return (
       <div className="rules-panel">
-        <p className="rules-label">Rules pack</p>
-        <p className="rules-empty">
-          Paste or upload rules you own or wrote. Open Kit does not ship
-          rulebooks.
-        </p>
-        <button
-          type="button"
-          className="rules-primary"
-          onClick={() => openImport(false)}
-        >
-          Import rules pack
-        </button>
+        <p className="rules-label">Active rules pack</p>
+        {readOnly ? (
+          <p className="rules-empty">
+            No rules pack in this room yet. Ask the DM to attach one.
+          </p>
+        ) : (
+          <>
+            <p className="rules-empty">
+              Paste or upload rules you own or wrote. Open Kit does not ship
+              rulebooks.
+            </p>
+            <p className="rules-sample">
+              Testing tip (link only):{' '}
+              <a href={SAMPLE_HELP_URL} target="_blank" rel="noreferrer">
+                Lasers &amp; Feelings
+              </a>{' '}
+              (CC BY 4.0) — copy text yourself; do not commit it here.
+            </p>
+            <button
+              type="button"
+              className="rules-primary"
+              onClick={() => openImport(false)}
+            >
+              Import rules pack
+            </button>
+          </>
+        )}
       </div>
     )
   }
 
   return (
     <div className="rules-panel has-pack">
-      <p className="rules-label">Active rules pack</p>
+      <p className="rules-label">
+        Active rules pack
+        {readOnly && <span className="rules-readonly-badge">Read-only</span>}
+        {inRoom && !readOnly && (
+          <span className="rules-room-badge">Room · DM</span>
+        )}
+      </p>
       <div className="rules-active-head">
         <strong className="rules-title">{pack.title}</strong>
         <span className="rules-license" title={pack.license}>
@@ -288,23 +323,27 @@ export function RulesPackPanel({
         >
           {viewOpen ? 'Hide' : 'View'}
         </button>
-        <button
-          type="button"
-          className="rules-secondary"
-          onClick={() => openImport(true)}
-        >
-          Replace
-        </button>
-        <button
-          type="button"
-          className="rules-danger"
-          onClick={() => {
-            setViewOpen(false)
-            onClear()
-          }}
-        >
-          Clear
-        </button>
+        {!readOnly && (
+          <>
+            <button
+              type="button"
+              className="rules-secondary"
+              onClick={() => openImport(true)}
+            >
+              Replace
+            </button>
+            <button
+              type="button"
+              className="rules-danger"
+              onClick={() => {
+                setViewOpen(false)
+                onClear()
+              }}
+            >
+              Clear
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

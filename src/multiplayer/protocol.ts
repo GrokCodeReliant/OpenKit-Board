@@ -1,3 +1,4 @@
+import type { RulesPack } from '../rulesPack'
 import type { AssetCategory, PlacedPiece } from '../types'
 
 export type Role = 'dm' | 'player'
@@ -5,6 +6,8 @@ export type Role = 'dm' | 'player'
 export interface RoomState {
   mapRadius: number
   pieces: PlacedPiece[]
+  /** DM-owned active rules pack for the room (null = none). */
+  rulesPack: RulesPack | null
 }
 
 /** Client → server */
@@ -21,6 +24,7 @@ export type ClientMessage =
     }
   | { type: 'move'; id: string; q: number; r: number }
   | { type: 'delete'; id: string }
+  | { type: 'setRulesPack'; pack: RulesPack | null }
 
 /** Server → client */
 export type ServerMessage =

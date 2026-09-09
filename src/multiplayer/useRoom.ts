@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AssetCategory, PlacedPiece } from '../types'
+import type { RulesPack } from '../rulesPack'
 import type { ClientMessage, Role, RoomState, ServerMessage } from './protocol'
 import { wsUrl } from './protocol'
 
@@ -21,6 +22,7 @@ export interface RoomSession {
   place: (assetId: string, q: number, r: number, category: AssetCategory) => void
   move: (id: string, q: number, r: number) => void
   deletePiece: (id: string) => void
+  setRulesPack: (pack: RulesPack | null) => void
 }
 
 export function useRoom(autoJoin?: { code: string; role: Role } | null): RoomSession {
@@ -161,6 +163,12 @@ export function useRoom(autoJoin?: { code: string; role: Role } | null): RoomSes
     [connectAndSend],
   )
 
+  const setRulesPack = useCallback(
+    (pack: RulesPack | null) =>
+      connectAndSend({ type: 'setRulesPack', pack }),
+    [connectAndSend],
+  )
+
   // Auto-join from ?room=&role=
   useEffect(() => {
     if (!autoJoin?.code || autoJoined.current) return
@@ -193,6 +201,7 @@ export function useRoom(autoJoin?: { code: string; role: Role } | null): RoomSes
     place,
     move,
     deletePiece,
+    setRulesPack,
   }
 }
 
