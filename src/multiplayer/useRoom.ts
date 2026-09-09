@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AssetCategory, PlacedPiece } from '../types'
 import type { RulesPack } from '../rulesPack'
+import { BODY_HARD_LIMIT } from '../rulesPack'
 import type { ClientMessage, Role, RoomState, ServerMessage } from './protocol'
 import { wsUrl } from './protocol'
 
@@ -164,8 +165,19 @@ export function useRoom(autoJoin?: { code: string; role: Role } | null): RoomSes
   )
 
   const setRulesPack = useCallback(
-    (pack: RulesPack | null) =>
-      connectAndSend({ type: 'setRulesPack', pack }),
+    (pack: RulesPack | null) => {
+      if (
+        pack &&
+        (pack.body.length > BODY_HARD_LIMIT ||
+          pack.byteLength > BODY_HARD_LIMIT)
+      ) {
+        setLastError(
+          `Rules pack too large to sync over the room (max ${BODY_HARD_LIMIT.toLocaleString()} characters). Shorten it and try again.`,
+        )
+        return
+      }
+      connectAndSend({ type: 'setRulesPack', pack })
+    },
     [connectAndSend],
   )
 

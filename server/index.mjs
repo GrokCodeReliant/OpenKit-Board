@@ -217,7 +217,12 @@ const httpServer = createServer((req, res) => {
   res.end('Open Kit Board room server. Connect via WebSocket.')
 })
 
-const wss = new WebSocketServer({ server: httpServer })
+// Cap inbound frames so a huge/garbage rules payload cannot crash the room WS.
+// Pack body hard limit is 500k chars; leave headroom for JSON envelope + room state.
+const wss = new WebSocketServer({
+  server: httpServer,
+  maxPayload: 1_500_000,
+})
 
 wss.on('connection', (ws) => {
   const clientId = `c${nextClientSeq++}`
@@ -398,7 +403,7 @@ wss.on('connection', (ws) => {
       if (normalized === false) {
         send(ws, {
           type: 'error',
-          message: 'Invalid rules pack (check fields and size limit)',
+          message: 'Invalid rules pack (check fields and size — max 500,000 characters; PDF bytes are not accepted)',
         })
         return
       }
