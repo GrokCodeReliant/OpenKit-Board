@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadAssetsFromManifest } from './assets'
 import { HexBoard } from './components/HexBoard'
 import { RoomPanel } from './components/RoomPanel'
+import { PresenceToggle } from './components/PresenceToggle'
+import { RoomBackdrop } from './components/RoomBackdrop'
 import { RulesPackPanel } from './components/RulesPackPanel'
 import { Sidebar } from './components/Sidebar'
 import { generateHexMap, hexKey } from './hex'
@@ -14,6 +16,8 @@ import {
 } from './multiplayer/useRoom'
 import type { RulesPack } from './rulesPack'
 import { loadActiveRulesPack, saveActiveRulesPack } from './rulesPack'
+import type { RoomMode } from './roomShell'
+import { loadRoomMode, saveRoomMode } from './roomShell'
 import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PlacedPiece } from './types'
 import { layerForCategory } from './types'
 import './App.css'
@@ -59,6 +63,12 @@ function App() {
   const [activeRulesPack, setActiveRulesPack] = useState<RulesPack | null>(() =>
     loadActiveRulesPack(),
   )
+  const [roomMode, setRoomMode] = useState<RoomMode>(() => loadRoomMode())
+
+  const onRoomModeChange = useCallback((mode: RoomMode) => {
+    setRoomMode(mode)
+    saveRoomMode(mode)
+  }, [])
 
   const room = useRoom(urlJoin)
 
@@ -361,7 +371,10 @@ function App() {
           />
         }
       />
-      <main className="main">
+      <main className={`main room-mode-${roomMode}`}>
+        {roomMode !== 'void' && <RoomBackdrop />}
+        <div className="room-vignette" aria-hidden="true" />
+        <PresenceToggle mode={roomMode} onChange={onRoomModeChange} />
         {loadError && (
           <div className="banner error">Failed to load assets: {loadError}</div>
         )}
