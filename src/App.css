@@ -303,3 +303,30 @@
     border-bottom: 1px solid #333946;
   }
 }
+
+
+.filter-grid {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0 0.85rem 0.75rem;
+}
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #a8b0c0;
+}
+.filter-field select {
+  background: #12151c;
+  color: #e8eaef;
+  border: 1px solid #2a3140;
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+}
+.palette-count {
+  margin: 0 0.85rem 0.35rem;
+  font-size: 0.72rem;
+  color: #7a8499;
+}
