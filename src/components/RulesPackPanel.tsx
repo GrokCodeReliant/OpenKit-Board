@@ -139,7 +139,7 @@ export function RulesPackPanel({
     const softWarn = body.length >= BODY_SOFT_LIMIT
     return (
       <div className="rules-panel">
-        <p className="rules-label">Import rules pack</p>
+        <p className="rules-label">Slip in a rules folio</p>
         <p className="rules-empty">
           Paste or upload rules you own or wrote. Open Kit does not ship
           rulebooks.
@@ -236,8 +236,8 @@ export function RulesPackPanel({
             {busy
               ? 'Saving…'
               : inRoom
-                ? 'Attach to room'
-                : 'Attach to session'}
+                ? 'Lay on table'
+                : 'Lay on table'}
           </button>
           <button
             type="button"
@@ -257,7 +257,7 @@ export function RulesPackPanel({
   if (!pack) {
     return (
       <div className="rules-panel">
-        <p className="rules-label">Active rules pack</p>
+        <p className="rules-label">Rules folio</p>
         {readOnly ? (
           <p className="rules-empty">
             No rules pack in this room yet. Ask the DM to attach one.
@@ -291,10 +291,10 @@ export function RulesPackPanel({
   return (
     <div className="rules-panel has-pack">
       <p className="rules-label">
-        Active rules pack
+        Rules folio
         {readOnly && <span className="rules-readonly-badge">Read-only</span>}
         {inRoom && !readOnly && (
-          <span className="rules-room-badge">Room · DM</span>
+          <span className="rules-room-badge">Table · DM</span>
         )}
       </p>
       <div className="rules-active-head">
