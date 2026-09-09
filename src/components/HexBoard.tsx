@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Role } from '../multiplayer/protocol'
+import { canControlPiece } from '../multiplayer/useRoom'
 import type { AssetDef, HexCoord, PlacedPiece } from '../types'
 import {
   HEX_SIZE,
@@ -16,6 +18,9 @@ interface HexBoardProps {
   selectedPieceId: string | null
   selectedAssetId: string | null
   hoverHex: HexCoord | null
+  clientId: string | null
+  role: Role | null
+  inRoom: boolean
   onHoverHex: (h: HexCoord | null) => void
   onPlaceAt: (q: number, r: number) => void
   onSelectPiece: (id: string | null) => void
@@ -30,6 +35,9 @@ export function HexBoard({
   selectedPieceId,
   selectedAssetId,
   hoverHex,
+  clientId,
+  role,
+  inRoom,
   onHoverHex,
   onPlaceAt,
   onSelectPiece,
@@ -147,16 +155,19 @@ export function HexBoard({
 
     if (piece) {
       onSelectPiece(piece.id)
-      dragRef.current = {
-        mode: 'piece',
-        startX: e.clientX,
-        startY: e.clientY,
-        panX: pan.x,
-        panY: pan.y,
-        pieceId: piece.id,
+      const movable = canControlPiece(role, inRoom, clientId, piece)
+      if (movable) {
+        dragRef.current = {
+          mode: 'piece',
+          startX: e.clientX,
+          startY: e.clientY,
+          panX: pan.x,
+          panY: pan.y,
+          pieceId: piece.id,
+        }
+        setDragging(true)
+        ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
       }
-      setDragging(true)
-      ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
       return
     }
 

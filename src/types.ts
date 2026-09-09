@@ -49,6 +49,10 @@ export interface PlacedPiece {
   r: number
   /** tiles = ground; others sit above */
   layer: 'ground' | 'object'
+  /** Client id of who placed the piece (multiplayer ownership). */
+  ownerId?: string
+  /** Asset category at place-time (server permission checks). */
+  category?: AssetCategory
 }
 
 export const CATEGORIES: { id: AssetCategory; label: string }[] = [

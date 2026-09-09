@@ -1,3 +1,6 @@
+import type { ReactNode } from 'react'
+import type { Role } from '../multiplayer/protocol'
+import { canPlaceCategory } from '../multiplayer/useRoom'
 import type { AssetCategory, AssetDef, AssetTheme, LevelBand } from '../types'
 import { CATEGORIES, LEVEL_BANDS, THEMES } from '../types'
 
@@ -17,6 +20,9 @@ interface SidebarProps {
   search: string
   selectedAssetId: string | null
   mapRadius: number
+  radiusEditable: boolean
+  role: Role | null
+  inRoom: boolean
   onMapRadiusChange: (n: number) => void
   onCategoryChange: (c: AssetCategory) => void
   onThemeChange: (t: AssetTheme | 'all') => void
@@ -24,6 +30,7 @@ interface SidebarProps {
   onSearchChange: (s: string) => void
   onSelectAsset: (id: string | null) => void
   onDragStart: (asset: AssetDef) => void
+  roomSlot?: ReactNode
 }
 
 export function Sidebar({
@@ -34,6 +41,9 @@ export function Sidebar({
   search,
   selectedAssetId,
   mapRadius,
+  radiusEditable,
+  role,
+  inRoom,
   onMapRadiusChange,
   onCategoryChange,
   onThemeChange,
@@ -41,6 +51,7 @@ export function Sidebar({
   onSearchChange,
   onSelectAsset,
   onDragStart,
+  roomSlot,
 }: SidebarProps) {
   const q = search.trim().toLowerCase()
   const filtered = assets.filter((a) => {
@@ -55,11 +66,22 @@ export function Sidebar({
     <aside className="sidebar">
       <header className="sidebar-header">
         <h1>Open Kit Board</h1>
-        <p className="sidebar-sub">DM hex board · demo pack · no AI required</p>
+        <p className="sidebar-sub">
+          {inRoom
+            ? role === 'dm'
+              ? 'DM · live room'
+              : 'Player · tokens you own'
+            : 'DM hex board · demo pack · no AI'}
+        </p>
       </header>
 
-      <div className="board-size-control">
-        <label htmlFor="board-radius">Board size (radius)</label>
+      {roomSlot}
+
+      <div className={`board-size-control ${radiusEditable ? '' : 'disabled'}`}>
+        <label htmlFor="board-radius">
+          Board size (radius)
+          {!radiusEditable && <span className="lock-hint"> · DM only</span>}
+        </label>
         <div className="board-size-row">
           <input
             id="board-radius"
@@ -67,6 +89,7 @@ export function Sidebar({
             min={MIN_RADIUS}
             max={MAX_RADIUS}
             value={mapRadius}
+            disabled={!radiusEditable}
             onChange={(e) => onMapRadiusChange(Number(e.target.value))}
           />
           <input
@@ -74,6 +97,7 @@ export function Sidebar({
             min={MIN_RADIUS}
             max={MAX_RADIUS}
             value={mapRadius}
+            disabled={!radiusEditable}
             onChange={(e) => onMapRadiusChange(Number(e.target.value))}
             aria-label="Board size radius slider"
           />
@@ -115,16 +139,21 @@ export function Sidebar({
       </div>
 
       <nav className="category-tabs" aria-label="Asset categories">
-        {CATEGORIES.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            className={category === c.id ? 'tab active' : 'tab'}
-            onClick={() => onCategoryChange(c.id)}
-          >
-            {c.label}
-          </button>
-        ))}
+        {CATEGORIES.map((c) => {
+          const allowed = canPlaceCategory(role, inRoom, c.id)
+          return (
+            <button
+              key={c.id}
+              type="button"
+              className={category === c.id ? 'tab active' : 'tab'}
+              disabled={!allowed}
+              title={allowed ? c.label : 'Players may only place tokens'}
+              onClick={() => onCategoryChange(c.id)}
+            >
+              {c.label}
+            </button>
+          )
+        })}
       </nav>
 
       <div className="search-wrap">
@@ -146,16 +175,29 @@ export function Sidebar({
         )}
         {filtered.map((asset) => {
           const selected = selectedAssetId === asset.id
+          const allowed = canPlaceCategory(role, inRoom, asset.category)
           return (
             <button
               key={asset.id}
               type="button"
               role="listitem"
               className={selected ? 'palette-item selected' : 'palette-item'}
-              draggable
-              title={`${asset.name} — drag onto a hex, or click then click a hex`}
-              onClick={() => onSelectAsset(selected ? null : asset.id)}
+              draggable={allowed}
+              disabled={!allowed}
+              title={
+                allowed
+                  ? `${asset.name} — drag onto a hex, or click then click a hex`
+                  : 'Players may only place tokens'
+              }
+              onClick={() => {
+                if (!allowed) return
+                onSelectAsset(selected ? null : asset.id)
+              }}
               onDragStart={(e) => {
+                if (!allowed) {
+                  e.preventDefault()
+                  return
+                }
                 e.dataTransfer.setData('application/x-openkit-asset', asset.id)
                 e.dataTransfer.effectAllowed = 'copy'
                 onDragStart(asset)
@@ -174,7 +216,11 @@ export function Sidebar({
             ? 'Click a hex to place. Esc to clear.'
             : 'Drag onto hex, or click asset then hex.'}
         </p>
-        <p className="hint">Select piece → move · Del removes · You write the story</p>
+        <p className="hint">
+          {inRoom && role === 'player'
+            ? 'Move/delete only your tokens · Del removes'
+            : 'Select piece → move · Del removes · You write the story'}
+        </p>
       </footer>
     </aside>
   )
