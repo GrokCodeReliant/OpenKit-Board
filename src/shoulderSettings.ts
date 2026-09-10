@@ -8,6 +8,22 @@ export const SHOULDER_OLLAMA_MODEL_KEY = 'okb.shoulder.ollamaModel.v1'
 export const DEFAULT_OLLAMA_BASE = '/ollama'
 export const DEFAULT_OLLAMA_MODEL = 'qwen3-coder:30b'
 
+/**
+ * Browser cannot call Ollama on 127.0.0.1/localhost (CORS).
+ * Rewrite common loopback absolute bases to the room-server proxy `/ollama`.
+ */
+export function normalizeOllamaBaseUrl(url: string): string {
+  const t = (url || '').trim().replace(/\/$/, '')
+  if (!t) return DEFAULT_OLLAMA_BASE
+  // http(s)://127.0.0.1:11434 | localhost:11434 | [::1]:11434 → /ollama (CORS)
+  if (
+    /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):11434$/i.test(t)
+  ) {
+    return DEFAULT_OLLAMA_BASE
+  }
+  return t
+}
+
 /** Vite env hook for alternate backends. */
 export function envShoulderUrl(): string | undefined {
   const v = import.meta.env.VITE_SHOULDER_URL as string | undefined
@@ -18,15 +34,27 @@ export function envShoulderUrl(): string | undefined {
 export function loadShoulderOllamaUrl(): string {
   try {
     const raw = localStorage.getItem(SHOULDER_OLLAMA_URL_KEY)
-    if (typeof raw === 'string' && raw.trim()) return raw.trim()
+    if (typeof raw === 'string' && raw.trim()) {
+      const normalized = normalizeOllamaBaseUrl(raw)
+      // Persist migration away from CORS-doom loopback URLs
+      if (normalized !== raw.trim().replace(/\/$/, '')) {
+        try {
+          localStorage.setItem(SHOULDER_OLLAMA_URL_KEY, normalized)
+        } catch {
+          /* ignore */
+        }
+      }
+      return normalized
+    }
   } catch {
     /* ignore */
   }
-  return envShoulderUrl() || DEFAULT_OLLAMA_BASE
+  const fromEnv = envShoulderUrl()
+  return fromEnv ? normalizeOllamaBaseUrl(fromEnv) : DEFAULT_OLLAMA_BASE
 }
 
 export function saveShoulderOllamaUrl(url: string): void {
-  const t = url.trim() || DEFAULT_OLLAMA_BASE
+  const t = normalizeOllamaBaseUrl(url.trim() || DEFAULT_OLLAMA_BASE)
   localStorage.setItem(SHOULDER_OLLAMA_URL_KEY, t)
 }
 
