@@ -12,7 +12,13 @@ import {
 const RIGHTS_LABEL =
   'I affirm I have the right to use this text in my private session (I wrote it, I own it, or its license allows my use).'
 
-/** Link-only sample — never vendor pack body in the repo. */
+/** Built-in original sample we ship (CC0) — not third-party rulebook text. */
+const KIT_SPARKS_URL = '/samples/kit-sparks.md'
+const KIT_SPARKS_TITLE = 'Kit Sparks'
+const KIT_SPARKS_LICENSE = 'CC0 1.0'
+const KIT_SPARKS_CREDIT = 'Open Kit sample'
+
+/** Link-only tip — never vendor Lasers & Feelings body in the repo. */
 const SAMPLE_HELP_URL = 'https://johnharper.itch.io/lasers-feelings'
 
 interface RulesPackPanelProps {
@@ -93,6 +99,42 @@ export function RulesPackPanel({
     }
     setRightsOk(false)
     setImporting(true)
+  }
+
+  /** One-click: fetch shipped Kit Sparks, affirm rights, attach + open folio. */
+  const loadKitSparksSample = async () => {
+    if (readOnly) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(KIT_SPARKS_URL)
+      if (!res.ok) {
+        throw new Error(`Could not load Kit Sparks sample (${res.status}).`)
+      }
+      const sampleBody = await res.text()
+      if (!sampleBody.trim()) {
+        throw new Error('Kit Sparks sample was empty.')
+      }
+      const packNext = await createRulesPack({
+        title: KIT_SPARKS_TITLE,
+        body: sampleBody,
+        license: KIT_SPARKS_LICENSE,
+        format: 'markdown',
+        attribution: KIT_SPARKS_CREDIT,
+        importedBy,
+      })
+      onAttach(packNext)
+      // Parent also opens folio on attach; call here for a clear one-click path.
+      onOpenFolio?.()
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Could not load the Kit Sparks sample.',
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   const onFile = async (file: File | null) => {
@@ -352,22 +394,40 @@ export function RulesPackPanel({
             <p className="rules-empty">
               Private folio for this session. Paste or upload text you have the
               right to use — you are responsible for what you import. Open Kit
-              does not ship rulebooks and does not republish your packs.
+              does not republish your packs. A tiny original sample is included
+              for demos and AI/helper tests.
+            </p>
+            <div className="rules-actions">
+              <button
+                type="button"
+                className="rules-primary"
+                disabled={busy}
+                onClick={() => void loadKitSparksSample()}
+              >
+                {busy ? 'Loading Kit Sparks…' : 'Load Kit Sparks sample'}
+              </button>
+              <button
+                type="button"
+                className="rules-secondary"
+                disabled={busy}
+                onClick={() => openImport(false)}
+              >
+                Import rules pack
+              </button>
+            </div>
+            <p className="rules-sample">
+              Kit Sparks is CC0 (Fight / Sneak / Grit, Armor, HP, Fighter &amp;
+              Rogue). Loading it affirms rights for this shipped sample and lays
+              the folio on the table.
             </p>
             <p className="rules-sample">
-              Testing tip (link only):{' '}
+              Prefer your own one-pager? Testing tip (link only):{' '}
               <a href={SAMPLE_HELP_URL} target="_blank" rel="noreferrer">
                 Lasers &amp; Feelings
               </a>{' '}
               — copy text yourself; do not commit it here.
             </p>
-            <button
-              type="button"
-              className="rules-primary"
-              onClick={() => openImport(false)}
-            >
-              Import rules pack
-            </button>
+            {error && <p className="rules-error">{error}</p>}
           </>
         )}
       </div>
