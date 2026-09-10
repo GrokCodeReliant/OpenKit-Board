@@ -52,17 +52,18 @@ Optional: set `VITE_WS_URL` (e.g. `ws://localhost:3001`) to bypass the Vite prox
 ## Rules packs (Bite A–C)
 
 Import **your own** rules text for the session — paste or upload `.txt` / `.md` / `.pdf` (PDF text is extracted in the browser; binary PDF is never synced).
-Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
+Open Kit Board does **not** republish third-party rulebooks.
 
-- Fields: title, body, optional note/credit, required rights acknowledgment (license stays on the data model as optional `"private session"` — not collected in import UX)
+- **Load Kit Sparks sample** — one-click ships our original CC0 micro-rules (`public/samples/kit-sparks.md`: Fight/Sneak/Grit, Armor, HP, Fighter & Rogue). Sets title **Kit Sparks**, license/credit **CC0 1.0** / Open Kit sample, affirms rights for this shipped sample, attaches to the table, and opens the folio.
+- Fields (custom import): title, body, optional note/credit, required rights acknowledgment (license stays on the data model as optional `"private session"` — not collected in import UX)
 - Solo: active pack in browser `localStorage` (works offline)
 - Sidebar **Rules folio** panel for all roles (title, optional license badge, note/credit)
 - **Open folio** opens a floating draggable window with the full scrollable pack body
 - Multiplayer: DM attaches/replaces/clears the room pack; it syncs over WebSocket; players are read-only
 - Late joiners receive the current room pack in `joined` / `state`
 
-For a short CC-licensed one-pager to paste yourself while testing, see
-[Lasers & Feelings](https://johnharper.itch.io/lasers-feelings) (CC BY 4.0) — download/copy from the author; do not commit that text here.
+Optional testing tip (link only — do not commit third-party bodies):
+[Lasers & Feelings](https://johnharper.itch.io/lasers-feelings) (CC BY 4.0).
 
 
 ## Piece visual transforms
