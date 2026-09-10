@@ -6,7 +6,7 @@ export const SHOULDER_OLLAMA_MODEL_KEY = 'okb.shoulder.ollamaModel.v1'
 
 /** Default base is the Vite/dev proxy path (relative → Vite → Ollama; room server also serves /ollama). */
 export const DEFAULT_OLLAMA_BASE = '/ollama'
-export const DEFAULT_OLLAMA_MODEL = 'qwen3-coder:30b'
+export const DEFAULT_OLLAMA_MODEL = 'llama3.1:8b'
 
 /**
  * Browser cannot call Ollama on 127.0.0.1/localhost (CORS).
@@ -74,10 +74,23 @@ export function saveShoulderOllamaEnabled(enabled: boolean): void {
   localStorage.setItem(SHOULDER_OLLAMA_ENABLED_KEY, enabled ? '1' : '0')
 }
 
+/** Previous default — migrate browsers still on this (or empty) to llama3.1:8b. */
+const LEGACY_DEFAULT_OLLAMA_MODEL = 'qwen3-coder:30b'
+
 export function loadShoulderOllamaModel(): string {
   try {
     const raw = localStorage.getItem(SHOULDER_OLLAMA_MODEL_KEY)
-    if (typeof raw === 'string' && raw.trim()) return raw.trim()
+    const trimmed = typeof raw === 'string' ? raw.trim() : ''
+    // One-time migration: empty or prior default → new story/D&D default
+    if (!trimmed || trimmed === LEGACY_DEFAULT_OLLAMA_MODEL) {
+      try {
+        localStorage.setItem(SHOULDER_OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_MODEL)
+      } catch {
+        /* ignore */
+      }
+      return DEFAULT_OLLAMA_MODEL
+    }
+    return trimmed
   } catch {
     /* ignore */
   }

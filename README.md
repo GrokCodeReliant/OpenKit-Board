@@ -2,7 +2,7 @@
 
 Digital square checkerboard game board for Open Kit D&D-style PNG assets.
 
-MVP: **Shoulder** is a private floating chat (per browser client). When **Ollama** is reachable (default model `qwen3-coder:30b`, tools-capable), it answers from the active rules pack and — for DM/solo — calls board tools (`search_assets`, `place_pieces`, etc.) so natural language like “camp and 5 goblins” places real kit assets. In dev, the browser talks to `/ollama` → Vite proxy → `127.0.0.1:11434` directly (room server still proxies `/ollama` for non-Vite; set `OPENKIT_OLLAMA_URL` to override). If Ollama is off, Shoulder uses the extractive local helper + hard-coded place planner; if an Ollama chat call fails mid-session, it shows a clear error (rules-only Q&A optional) and does **not** place via the hard-coded planner. Players get rules Q&A only (no place tools). No paid API.
+MVP: **Shoulder** is a private floating chat (per browser client). When **Ollama** is reachable (default model `llama3.1:8b`, tools-capable), it answers from the active rules pack and — for DM/solo — calls board tools (`search_assets`, `place_pieces`, etc.) so natural language like “camp and 5 goblins” places real kit assets. In dev, the browser talks to `/ollama` → Vite proxy → `127.0.0.1:11434` directly (room server still proxies `/ollama` for non-Vite; set `OPENKIT_OLLAMA_URL` to override). If Ollama is off, Shoulder uses the extractive local helper + hard-coded place planner; if an Ollama chat call fails mid-session, it shows a clear error (rules-only Q&A optional) and does **not** place via the hard-coded planner. Players get rules Q&A only (no place tools). No paid API.
 
 ## Quick start
 
@@ -37,7 +37,7 @@ npm run server
 npm run dev
 ```
 
-Ollama Shoulder needs Ollama running locally with a tools-capable model (default `qwen3-coder:30b`). Room server is still required for multiplayer / live kit; Vite proxies `/ollama` straight to Ollama in dev.
+Ollama Shoulder needs Ollama running locally with a tools-capable model (default `llama3.1:8b`). Room server is still required for multiplayer / live kit; Vite proxies `/ollama` straight to Ollama in dev.
 
 Open `http://localhost:5173` in two browser tabs:
 
