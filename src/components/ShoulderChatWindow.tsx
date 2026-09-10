@@ -25,16 +25,26 @@ import {
 import {
   DEFAULT_OLLAMA_BASE,
   DEFAULT_OLLAMA_MODEL,
+  DEFAULT_XAI_MODEL,
   envShoulderUrl,
+  hasShoulderXaiApiKey,
   loadShoulderOllamaEnabled,
   loadShoulderOllamaModel,
   loadShoulderOllamaUrl,
+  loadShoulderProvider,
+  loadShoulderXaiApiKey,
+  loadShoulderXaiModel,
+  normalizeOllamaBaseUrl,
   saveShoulderOllamaEnabled,
   saveShoulderOllamaModel,
   saveShoulderOllamaUrl,
-  normalizeOllamaBaseUrl,
+  saveShoulderProvider,
+  saveShoulderXaiApiKey,
+  saveShoulderXaiModel,
+  type ShoulderProvider,
 } from '../shoulderSettings'
 import { probeOllamaTags, runShoulderOllamaChat } from '../shoulderOllama'
+import { probeXaiModels, runShoulderXaiChat } from '../shoulderXai'
 import type { ShoulderToolContext } from '../shoulderTools'
 
 export interface ChatMessage {
@@ -89,7 +99,7 @@ export function ShoulderChatWindow({
       id: newId(),
       role: 'system',
       text:
-        'Shoulder — rules Q&A + DM board tools. Prefers local Ollama (via /ollama proxy) with tool calling; falls back to the offline local helper when Ollama is off or unreachable.',
+        'Shoulder — rules Q&A + DM board tools. Choose Ollama (local) or Grok xAI in Settings. Tool calling places kit assets for DM/solo; falls back to the offline local helper when the selected provider is unavailable.',
     },
   ])
   const [draft, setDraft] = useState('')
@@ -100,9 +110,17 @@ export function ShoulderChatWindow({
     const saved = loadShoulderOllamaEnabled()
     return saved === null ? true : saved
   })
+  const [provider, setProvider] = useState<ShoulderProvider>(() => loadShoulderProvider())
+  const [xaiModel, setXaiModel] = useState(() => loadShoulderXaiModel())
+  const [xaiApiKey, setXaiApiKey] = useState(() => loadShoulderXaiApiKey())
   const [reach, setReach] = useState<ReachState>('checking')
+  const [xaiReach, setXaiReach] = useState<ReachState>(() =>
+    hasShoulderXaiApiKey() ? 'checking' : 'offline',
+  )
   const [probeError, setProbeError] = useState<string | null>(null)
+  const [xaiProbeError, setXaiProbeError] = useState<string | null>(null)
   const [models, setModels] = useState<string[]>([])
+  const [xaiModels, setXaiModels] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -149,15 +167,65 @@ export function ShoulderChatWindow({
     return () => ac.abort()
   }, [ollamaUrl, probe])
 
+  const probeXai = useCallback(async (key: string) => {
+    const trimmed = key.trim()
+    if (!trimmed) {
+      // Still probe — server may have XAI_API_KEY / GROK_API_KEY in env
+      setXaiReach('checking')
+      setXaiProbeError(null)
+      const result = await probeXaiModels('')
+      if (result.ok) {
+        setXaiReach('ok')
+        setXaiProbeError(null)
+        setXaiModels(result.models)
+      } else {
+        setXaiReach('offline')
+        setXaiModels([])
+        setXaiProbeError(
+          result.error?.trim() ||
+            'No xAI key in settings and server env key missing/unreachable',
+        )
+      }
+      return result
+    }
+    setXaiReach('checking')
+    setXaiProbeError(null)
+    const result = await probeXaiModels(trimmed)
+    if (result.ok) {
+      setXaiReach('ok')
+      setXaiProbeError(null)
+      setXaiModels(result.models)
+    } else {
+      setXaiReach('offline')
+      setXaiModels([])
+      setXaiProbeError(result.error?.trim() || 'xAI probe failed')
+    }
+    return result
+  }, [])
+
+  useEffect(() => {
+    if (provider !== 'xai') return
+    void probeXai(xaiApiKey)
+  }, [provider, xaiApiKey, probeXai])
+
   const packLabel = pack?.title?.trim() || null
   const envUrl = envShoulderUrl()
-  const useOllama = ollamaEnabled && reach === 'ok'
+  const useXai =
+    provider === 'xai' && (xaiReach === 'ok' || xaiApiKey.trim().length > 0)
+  const useOllama = provider === 'ollama' && ollamaEnabled && reach === 'ok'
+  const useLlm = useXai || useOllama
 
-  const bannerLabel = useOllama
-    ? `Ollama · ${ollamaModel || DEFAULT_OLLAMA_MODEL}`
-    : reach === 'checking' && ollamaEnabled
-      ? 'Checking Ollama…'
-      : 'Local helper (Ollama offline)'
+  const bannerLabel = useXai
+    ? `Grok · ${xaiModel.trim() || DEFAULT_XAI_MODEL}`
+    : useOllama
+      ? `Ollama · ${ollamaModel || DEFAULT_OLLAMA_MODEL}`
+      : provider === 'xai'
+        ? xaiReach === 'checking'
+          ? 'Checking Grok…'
+          : 'Grok (key missing / offline)'
+        : reach === 'checking' && ollamaEnabled
+          ? 'Checking Ollama…'
+          : 'Local helper (Ollama offline)'
 
   /** Offline helper when Ollama is intentionally unused — may place via hard-coded planner. */
   const runLocalFallback = useCallback(
@@ -202,13 +270,13 @@ export function ShoulderChatWindow({
    * After an Ollama chat failure: never run the hard-coded place planner
    * (it nonsense-matches words like "pink"). Rules-only Q&A is OK.
    */
-  const rulesOnlyAfterOllamaFail = useCallback(
+  const rulesOnlyAfterLlmFail = useCallback(
     (q: string): string => {
       if (isPlaceIntent(q)) {
         return (
-          'Board place/arrange needs a working Ollama connection — ' +
+          'Board place/arrange needs a working LLM connection (Ollama or Grok) — ' +
           'no local place fallback (avoids nonsense asset matches). ' +
-          'Start Ollama, confirm the banner shows **Ollama**, then retry.'
+          'Confirm the banner shows **Ollama** or **Grok**, then retry.'
         )
       }
       const answer = answerFromRulesPack(
@@ -236,7 +304,7 @@ export function ShoulderChatWindow({
 
     let assistantText: string
 
-    if (useOllama) {
+    if (useLlm) {
       try {
         const history = messages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -284,20 +352,36 @@ export function ShoulderChatWindow({
           },
         }
 
-        const result = await runShoulderOllamaChat({
-          baseUrl: ollamaUrl.trim() || DEFAULT_OLLAMA_BASE,
-          model: ollamaModel.trim() || DEFAULT_OLLAMA_MODEL,
-          userText: q,
-          history,
-          pack,
-          pieceContext,
-          assets: assetsRef.current,
-          pieces: piecesRef.current,
-          mapRadius: mapRadiusRef.current,
-          canPlace: canPlaceFromChat,
-          toolCtx,
-          signal: ac.signal,
-        })
+        const result =
+          useXai
+            ? await runShoulderXaiChat({
+                model: xaiModel.trim() || DEFAULT_XAI_MODEL,
+                apiKey: xaiApiKey.trim() || undefined,
+                userText: q,
+                history,
+                pack,
+                pieceContext,
+                assets: assetsRef.current,
+                pieces: piecesRef.current,
+                mapRadius: mapRadiusRef.current,
+                canPlace: canPlaceFromChat,
+                toolCtx,
+                signal: ac.signal,
+              })
+            : await runShoulderOllamaChat({
+                baseUrl: ollamaUrl.trim() || DEFAULT_OLLAMA_BASE,
+                model: ollamaModel.trim() || DEFAULT_OLLAMA_MODEL,
+                userText: q,
+                history,
+                pack,
+                pieceContext,
+                assets: assetsRef.current,
+                pieces: piecesRef.current,
+                mapRadius: mapRadiusRef.current,
+                canPlace: canPlaceFromChat,
+                toolCtx,
+                signal: ac.signal,
+              })
         assistantText = result.text
         if (result.usedTools.length) {
           assistantText += `\n\n_Tools: ${result.usedTools.join(' → ')}_`
@@ -308,12 +392,22 @@ export function ShoulderChatWindow({
           return
         }
         const message = err instanceof Error ? err.message : String(err)
-        setReach('offline')
-        setProbeError(message)
-        assistantText =
-          `Ollama error (${message}). Is Ollama running? ` +
-          `Banner should show **Ollama** when reachable — no hard-coded place fallback.\n\n` +
-          rulesOnlyAfterOllamaFail(q)
+        if (useXai) {
+          setXaiReach('offline')
+          setXaiProbeError(message)
+          assistantText =
+            `Grok/xAI error (${message}). Check API key in Settings or server env ` +
+            `XAI_API_KEY/GROK_API_KEY, and that npm run server is up. ` +
+            `Banner should show **Grok · …** when ready — no hard-coded place fallback.\n\n` +
+            rulesOnlyAfterLlmFail(q)
+        } else {
+          setReach('offline')
+          setProbeError(message)
+          assistantText =
+            `Ollama error (${message}). Is Ollama running? ` +
+            `Banner should show **Ollama** when reachable — no hard-coded place fallback.\n\n` +
+            rulesOnlyAfterLlmFail(q)
+        }
       }
     } else {
       assistantText = runLocalFallback(q)
@@ -329,7 +423,8 @@ export function ShoulderChatWindow({
   }, [
     draft,
     busy,
-    useOllama,
+    useLlm,
+    useXai,
     messages,
     canPlaceFromChat,
     onPlaceActions,
@@ -338,10 +433,12 @@ export function ShoulderChatWindow({
     onMovePiece,
     ollamaUrl,
     ollamaModel,
+    xaiModel,
+    xaiApiKey,
     pack,
     pieceContext,
     runLocalFallback,
-    rulesOnlyAfterOllamaFail,
+    rulesOnlyAfterLlmFail,
   ])
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -354,13 +451,25 @@ export function ShoulderChatWindow({
   const onSaveSettings = () => {
     const url = normalizeOllamaBaseUrl(ollamaUrl.trim() || DEFAULT_OLLAMA_BASE)
     const model = ollamaModel.trim() || DEFAULT_OLLAMA_MODEL
+    const xModel = xaiModel.trim() || DEFAULT_XAI_MODEL
+    const key = xaiApiKey.trim()
     setOllamaUrl(url)
     setOllamaModel(model)
+    setXaiModel(xModel)
+    setXaiApiKey(key)
+    setProvider(provider)
     saveShoulderOllamaUrl(url)
     saveShoulderOllamaModel(model)
     saveShoulderOllamaEnabled(ollamaEnabled)
+    saveShoulderProvider(provider)
+    saveShoulderXaiModel(xModel)
+    saveShoulderXaiApiKey(key)
     setSettingsOpen(false)
-    void probe(url)
+    if (provider === 'xai') {
+      void probeXai(key)
+    } else {
+      void probe(url)
+    }
   }
 
   return (
@@ -369,9 +478,11 @@ export function ShoulderChatWindow({
         className="shoulder-banner"
         role="status"
         title={
-          reach === 'offline' && probeError
-            ? `Ollama probe/chat: ${probeError}`
-            : undefined
+          provider === 'xai' && xaiReach === 'offline' && xaiProbeError
+            ? `Grok probe/chat: ${xaiProbeError}`
+            : reach === 'offline' && probeError
+              ? `Ollama probe/chat: ${probeError}`
+              : undefined
         }
       >
         <strong>{bannerLabel}</strong>
@@ -383,9 +494,11 @@ export function ShoulderChatWindow({
           {pieceContext?.displayName
             ? ` · piece: ${pieceContext.displayName}`
             : ''}
-          {reach === 'offline' && probeError
-            ? ` · probe: ${probeError.slice(0, 80)}`
-            : ''}
+          {provider === 'xai' && xaiReach === 'offline' && xaiProbeError
+            ? ` · probe: ${xaiProbeError.slice(0, 80)}`
+            : reach === 'offline' && probeError
+              ? ` · probe: ${probeError.slice(0, 80)}`
+              : ''}
         </span>
       </div>
 
@@ -406,7 +519,7 @@ export function ShoulderChatWindow({
                 ? 'You'
                 : m.role === 'system'
                   ? 'Note'
-                  : useOllama
+                  : useLlm
                     ? 'Shoulder'
                     : 'Helper'}
             </span>
@@ -420,7 +533,11 @@ export function ShoulderChatWindow({
             <span className="shoulder-msg-role">Note</span>
             <div className="shoulder-msg-body">
               <p className="shoulder-p">
-                {useOllama ? 'Talking to Ollama…' : 'Thinking…'}
+                {useXai
+                  ? 'Talking to Grok…'
+                  : useOllama
+                    ? 'Talking to Ollama…'
+                    : 'Thinking…'}
               </p>
             </div>
           </div>
@@ -440,7 +557,7 @@ export function ShoulderChatWindow({
           placeholder={
             canPlaceFromChat
               ? pack
-                ? useOllama
+                ? useLlm
                   ? 'Ask rules, or “make a small camp and put 5 goblins around it”…'
                   : 'Ask rules, or “put a fae well and 3 imps around it”…'
                 : 'Place: “camp with 5 goblins” — or load a rules pack for Q&A…'
@@ -474,73 +591,157 @@ export function ShoulderChatWindow({
       {settingsOpen && (
         <div className="shoulder-settings" aria-label="Shoulder settings">
           <p className="shoulder-settings-note">
-            In <code>npm run dev</code>, the browser calls <code>/ollama</code>{' '}
-            and Vite proxies it directly to <code>http://127.0.0.1:11434</code>{' '}
-            (CORS-safe; avoids a Node fetch hop). The room server still exposes{' '}
-            <code>/ollama</code> for non-Vite / production. Use{' '}
-            <code>/ollama</code> as the base URL — do not point the browser at{' '}
-            <code>http://127.0.0.1:11434</code> directly. Prefer opening{' '}
-            <code>http://localhost:5173</code>. Saved loopback URLs rewrite to{' '}
-            <code>/ollama</code>. If chat fails, Shoulder shows an error and
+            Provider: <strong>Ollama</strong> (local, free) or <strong>Grok (xAI)</strong>{' '}
+            (paid, fast). Grok calls go browser → <code>/xai</code> → Vite → room server{' '}
+            <code>:3001</code> → <code>api.x.ai</code>. Paste an API key here (stored in{' '}
+            <code>localStorage</code> only — never committed) <em>or</em> set{' '}
+            <code>XAI_API_KEY</code> / <code>GROK_API_KEY</code> on the server before{' '}
+            <code>npm run server</code>. Ollama still uses <code>/ollama</code> →{' '}
+            <code>127.0.0.1:11434</code>. If chat fails, Shoulder shows an error and
             rules-only Q&A — it does <em>not</em> hard-code place assets.
-            {probeError ? (
+            {provider === 'xai' && xaiProbeError ? (
               <>
                 {' '}
-                Last probe/chat error: <code>{probeError}</code>.
+                Last Grok probe/chat error: <code>{xaiProbeError}</code>.
+              </>
+            ) : null}
+            {provider === 'ollama' && probeError ? (
+              <>
+                {' '}
+                Last Ollama probe/chat error: <code>{probeError}</code>.
               </>
             ) : null}
             {envUrl ? (
               <>
                 {' '}
-                <code>VITE_SHOULDER_URL</code> can override the default base.
+                <code>VITE_SHOULDER_URL</code> can override the Ollama default base.
               </>
             ) : null}
           </p>
-          <label className="shoulder-settings-check">
-            <input
-              type="checkbox"
-              checked={ollamaEnabled}
-              onChange={(e) => setOllamaEnabled(e.target.checked)}
-            />{' '}
-            Enable Ollama
-            {reach === 'ok'
-              ? ' (reachable)'
-              : reach === 'checking'
-                ? ' (checking…)'
-                : ' (offline)'}
-          </label>
-          <label className="shoulder-settings-label" htmlFor="shoulder-ollama">
-            Base URL (proxy)
-          </label>
-          <input
-            id="shoulder-ollama"
-            type="text"
-            className="shoulder-settings-input"
-            placeholder={DEFAULT_OLLAMA_BASE}
-            value={ollamaUrl}
-            onChange={(e) => setOllamaUrl(e.target.value)}
-            autoComplete="off"
-          />
-          <label className="shoulder-settings-label" htmlFor="shoulder-model">
-            Model
-          </label>
-          <input
-            id="shoulder-model"
-            type="text"
-            className="shoulder-settings-input"
-            placeholder={DEFAULT_OLLAMA_MODEL}
-            value={ollamaModel}
-            onChange={(e) => setOllamaModel(e.target.value)}
-            list="shoulder-model-list"
-            autoComplete="off"
-          />
-          {models.length > 0 ? (
-            <datalist id="shoulder-model-list">
-              {models.map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-          ) : null}
+
+          <fieldset className="shoulder-settings-fieldset">
+            <legend className="shoulder-settings-label">Provider</legend>
+            <label className="shoulder-settings-check">
+              <input
+                type="radio"
+                name="shoulder-provider"
+                checked={provider === 'ollama'}
+                onChange={() => setProvider('ollama')}
+              />{' '}
+              Ollama (local)
+            </label>
+            <label className="shoulder-settings-check">
+              <input
+                type="radio"
+                name="shoulder-provider"
+                checked={provider === 'xai'}
+                onChange={() => setProvider('xai')}
+              />{' '}
+              Grok (xAI)
+              {provider === 'xai'
+                ? xaiReach === 'ok'
+                  ? ' (reachable)'
+                  : xaiReach === 'checking'
+                    ? ' (checking…)'
+                    : xaiApiKey.trim()
+                      ? ' (key set · probe offline)'
+                      : ' (paste key or set server env)'
+                : ''}
+            </label>
+          </fieldset>
+
+          {provider === 'xai' ? (
+            <>
+              <label className="shoulder-settings-label" htmlFor="shoulder-xai-model">
+                Grok model
+              </label>
+              <input
+                id="shoulder-xai-model"
+                type="text"
+                className="shoulder-settings-input"
+                placeholder={DEFAULT_XAI_MODEL}
+                value={xaiModel}
+                onChange={(e) => setXaiModel(e.target.value)}
+                list="shoulder-xai-model-list"
+                autoComplete="off"
+              />
+              {xaiModels.length > 0 ? (
+                <datalist id="shoulder-xai-model-list">
+                  {xaiModels.map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+              ) : null}
+              <label className="shoulder-settings-label" htmlFor="shoulder-xai-key">
+                xAI API key (localStorage only)
+              </label>
+              <input
+                id="shoulder-xai-key"
+                type="password"
+                className="shoulder-settings-input"
+                placeholder="xai-… (optional if server has XAI_API_KEY)"
+                value={xaiApiKey}
+                onChange={(e) => setXaiApiKey(e.target.value)}
+                autoComplete="off"
+              />
+              <p className="shoulder-settings-note">
+                Key status:{' '}
+                {xaiApiKey.trim()
+                  ? 'set in this browser (localStorage)'
+                  : 'not in localStorage — server env may still work'}
+                . Never commit the key.
+              </p>
+            </>
+          ) : (
+            <>
+              <label className="shoulder-settings-check">
+                <input
+                  type="checkbox"
+                  checked={ollamaEnabled}
+                  onChange={(e) => setOllamaEnabled(e.target.checked)}
+                />{' '}
+                Enable Ollama
+                {reach === 'ok'
+                  ? ' (reachable)'
+                  : reach === 'checking'
+                    ? ' (checking…)'
+                    : ' (offline)'}
+              </label>
+              <label className="shoulder-settings-label" htmlFor="shoulder-ollama">
+                Base URL (proxy)
+              </label>
+              <input
+                id="shoulder-ollama"
+                type="text"
+                className="shoulder-settings-input"
+                placeholder={DEFAULT_OLLAMA_BASE}
+                value={ollamaUrl}
+                onChange={(e) => setOllamaUrl(e.target.value)}
+                autoComplete="off"
+              />
+              <label className="shoulder-settings-label" htmlFor="shoulder-model">
+                Model
+              </label>
+              <input
+                id="shoulder-model"
+                type="text"
+                className="shoulder-settings-input"
+                placeholder={DEFAULT_OLLAMA_MODEL}
+                value={ollamaModel}
+                onChange={(e) => setOllamaModel(e.target.value)}
+                list="shoulder-model-list"
+                autoComplete="off"
+              />
+              {models.length > 0 ? (
+                <datalist id="shoulder-model-list">
+                  {models.map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+              ) : null}
+            </>
+          )}
+
           <div className="shoulder-settings-actions">
             <button type="button" className="shoulder-send" onClick={onSaveSettings}>
               Save locally
@@ -548,7 +749,11 @@ export function ShoulderChatWindow({
             <button
               type="button"
               className="shoulder-settings-toggle"
-              onClick={() => void probe(ollamaUrl.trim() || DEFAULT_OLLAMA_BASE)}
+              onClick={() =>
+                provider === 'xai'
+                  ? void probeXai(xaiApiKey.trim())
+                  : void probe(ollamaUrl.trim() || DEFAULT_OLLAMA_BASE)
+              }
             >
               Re-check
             </button>

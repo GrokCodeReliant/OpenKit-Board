@@ -625,6 +625,131 @@ const httpServer = createServer((req, res) => {
     return
   }
 
+  // --- xAI Grok reverse proxy (OpenAI-compatible) ---
+  // Browser → Vite /xai → :3001 → https://api.x.ai/v1/...
+  // Bearer from env XAI_API_KEY / GROK_API_KEY, else inbound Authorization / x-xai-api-key.
+  // Never log API keys or Authorization headers.
+  const XAI_UPSTREAM = 'https://api.x.ai/v1'
+
+  if (pathname.startsWith('/xai/')) {
+    const upstreamPath = pathname.slice('/xai'.length) // /v1/chat/completions | /v1/models
+    const allowed =
+      (upstreamPath === '/v1/chat/completions' && req.method === 'POST') ||
+      (upstreamPath === '/v1/models' && (req.method === 'GET' || req.method === 'HEAD'))
+    if (!allowed) {
+      res.writeHead(404, jsonHeaders)
+      res.end(
+        JSON.stringify({
+          error: 'Only /xai/v1/chat/completions (POST) and /xai/v1/models (GET) are proxied',
+        }),
+      )
+      return
+    }
+
+    const envKey = (process.env.XAI_API_KEY || process.env.GROK_API_KEY || '').trim()
+    const inboundAuth =
+      typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : ''
+    const inboundXai =
+      typeof req.headers['x-xai-api-key'] === 'string' ? req.headers['x-xai-api-key'].trim() : ''
+    let bearer = ''
+    if (envKey) {
+      bearer = envKey
+    } else if (inboundAuth.toLowerCase().startsWith('bearer ')) {
+      bearer = inboundAuth.slice(7).trim()
+    } else if (inboundXai) {
+      bearer = inboundXai
+    }
+
+    if (!bearer) {
+      res.writeHead(401, jsonHeaders)
+      res.end(
+        JSON.stringify({
+          error: 'xAI API key missing',
+          hint:
+            'Set XAI_API_KEY or GROK_API_KEY on the server, or paste a key in Shoulder settings (Authorization / x-xai-api-key; localStorage only).',
+        }),
+      )
+      return
+    }
+
+    const chunks = []
+    req.on('data', (c) => chunks.push(c))
+    req.on('end', () => {
+      const bodyBuf = Buffer.concat(chunks)
+      // /xai/v1/chat/completions → https://api.x.ai/v1/chat/completions
+      const apiPath = upstreamPath.slice('/v1'.length) // /chat/completions | /models
+      const parsed = new URL(`${XAI_UPSTREAM}${apiPath}${url.search || ''}`)
+
+      /** @type {import('node:http').OutgoingHttpHeaders} */
+      const headers = {
+        Accept: 'application/json',
+        Authorization: `Bearer ${bearer}`,
+        Host: parsed.host,
+      }
+      if (req.method === 'POST') {
+        headers['Content-Type'] = req.headers['content-type'] || 'application/json'
+        headers['Content-Length'] = bodyBuf.length
+      }
+
+      const upstreamReq = httpsRequest(
+        {
+          protocol: parsed.protocol,
+          hostname: parsed.hostname,
+          port: parsed.port || 443,
+          path: `${parsed.pathname}${parsed.search}`,
+          method: req.method === 'HEAD' ? 'GET' : req.method,
+          headers,
+          timeout: 120_000,
+        },
+        (upstreamRes) => {
+          const outHeaders = {
+            'Content-Type': upstreamRes.headers['content-type'] || 'application/json',
+            'Cache-Control': 'no-store',
+          }
+          res.writeHead(upstreamRes.statusCode || 502, outHeaders)
+          if (req.method === 'HEAD') {
+            upstreamRes.resume()
+            res.end()
+            return
+          }
+          upstreamRes.pipe(res)
+        },
+      )
+
+      upstreamReq.on('timeout', () => {
+        upstreamReq.destroy(Object.assign(new Error('xAI upstream timeout'), { code: 'ETIMEDOUT' }))
+      })
+
+      upstreamReq.on('error', (err) => {
+        const message = err instanceof Error ? err.message : String(err)
+        const code =
+          err && typeof err === 'object' && 'code' in err
+            ? String(/** @type {{ code?: unknown }} */ (err).code || '')
+            : ''
+        console.error(
+          `[openkit-board] xai proxy upstream unreachable: ${message}${code ? ` code=${code}` : ''} → ${parsed.pathname}`,
+        )
+        if (!res.headersSent) {
+          res.writeHead(502, jsonHeaders)
+          res.end(
+            JSON.stringify({
+              error: 'xAI upstream unreachable',
+              detail: message,
+              code: code || undefined,
+              hint: 'Check network access to api.x.ai',
+            }),
+          )
+        }
+      })
+
+      if (req.method === 'POST') {
+        upstreamReq.write(bodyBuf)
+      }
+      upstreamReq.end()
+    })
+    return
+  }
+
   res.writeHead(404)
   res.end('Open Kit Board room server. Connect via WebSocket /kit.')
 })
@@ -871,6 +996,7 @@ httpServer.listen(PORT, () => {
   console.log(`[openkit-board] health http://localhost:${PORT}/health`)
   console.log(`[openkit-board] kit manifest http://localhost:${PORT}/kit/manifest`)
   console.log(`[openkit-board] ollama proxy http://localhost:${PORT}/ollama/api/tags → ${process.env.OPENKIT_OLLAMA_URL || 'http://127.0.0.1:11434'}`)
+  console.log(`[openkit-board] xai proxy http://localhost:${PORT}/xai/v1/chat/completions → https://api.x.ai/v1 (env key: ${process.env.XAI_API_KEY || process.env.GROK_API_KEY ? 'set' : 'unset'})`)
   if (kitPath) {
     console.log(`[openkit-board] Open Kit path: ${kitPath}`)
   } else {

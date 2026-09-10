@@ -2,7 +2,7 @@
 
 Digital square checkerboard game board for Open Kit D&D-style PNG assets.
 
-MVP: **Shoulder** is a private floating chat (per browser client). When **Ollama** is reachable (default model `llama3.1:8b`, tools-capable), it answers from the active rules pack and — for DM/solo — calls board tools (`search_assets`, `place_pieces`, etc.) so natural language like “camp and 5 goblins” places real kit assets. In dev, the browser talks to `/ollama` → Vite proxy → `127.0.0.1:11434` directly (room server still proxies `/ollama` for non-Vite; set `OPENKIT_OLLAMA_URL` to override). If Ollama is off, Shoulder uses the extractive local helper + hard-coded place planner; if an Ollama chat call fails mid-session, it shows a clear error (rules-only Q&A optional) and does **not** place via the hard-coded planner. Players get rules Q&A only (no place tools). No paid API.
+MVP: **Shoulder** is a private floating chat (per browser client). Choose **Ollama** (local) or **Grok (xAI)** in Shoulder Settings. With a tools-capable model it answers from the active rules pack and — for DM/solo — calls board tools (`search_assets`, `place_pieces`, etc.) so natural language like “camp and 5 goblins” places real kit assets. Ollama: browser → `/ollama` → Vite → `127.0.0.1:11434` (room server still proxies `/ollama` for non-Vite; `OPENKIT_OLLAMA_URL` overrides). Grok: browser → `/xai` → Vite → room server `:3001` → `https://api.x.ai/v1` (OpenAI-compatible tools; default model `grok-4.6`). Paste an xAI key in Settings (`localStorage` only) or set `XAI_API_KEY` / `GROK_API_KEY` on the server. If the selected LLM is off/unreachable, Shoulder uses the extractive local helper + hard-coded place planner; if an LLM chat call fails mid-session, it shows a clear error (rules-only Q&A optional) and does **not** place via the hard-coded planner. Players get rules Q&A only (no place tools).
 
 ## Quick start
 
@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` (prefer localhost over `127.0.0.1` if host binding differs). Ollama must be running locally for Shoulder board tools.
+Open `http://localhost:5173` (prefer localhost over `127.0.0.1` if host binding differs). For Ollama board tools, run Ollama locally; for Grok, set a key (Settings or server env) and keep `npm run server` up.
 
 Production:
 
@@ -33,11 +33,17 @@ No auth, no DB — rooms live in server memory.
 # Terminal A — room server (port 3001)
 npm run server
 
-# Terminal B — Vite client (/ws + /kit → :3001; /ollama → 127.0.0.1:11434)
+# Terminal B — Vite client (/ws + /kit + /xai → :3001; /ollama → 127.0.0.1:11434)
 npm run dev
 ```
 
-Ollama Shoulder needs Ollama running locally with a tools-capable model (default `llama3.1:8b`). Room server is still required for multiplayer / live kit; Vite proxies `/ollama` straight to Ollama in dev.
+**Shoulder — Ollama:** run Ollama locally with a tools-capable model (default `llama3.1:8b`). Vite proxies `/ollama` straight to Ollama in dev.
+
+**Shoulder — Grok (xAI):** keep the room server running (Vite proxies `/xai` → `:3001` → `api.x.ai`). Either:
+1. Open Shoulder → **Settings** → choose **Grok (xAI)** → paste API key → Save (key stays in `localStorage` only; never commit it), model default `grok-4.6`; or
+2. Export `XAI_API_KEY` or `GROK_API_KEY` before `npm run server` (server attaches Bearer; client key optional).
+
+Banner shows `Grok · grok-4.6` when Grok is selected and a key is available. Room server is still required for multiplayer / live kit / the xAI proxy.
 
 Open `http://localhost:5173` in two browser tabs:
 
@@ -116,7 +122,7 @@ the title bar; multiple sheets can be open at once.
 - **Piece sheet / pin library:** Select piece → index-card notes + freeform stats; pin by assetId in localStorage; **Pinned** floating window list/edit/place (local only, no WS)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Assets:** live Open Kit `passed/` via room server (`OPENKIT_KIT_PATH`), else curated demo pack (~18) under `public/assets/demo/`
-- **Shoulder:** tray button → floating local helper (rules Q&A + DM/solo “put a fae well and 3 imps around it” place/arrange; optional selected piece notes; piece-library stats when DM names HP ranges)
+- **Shoulder:** tray button → floating assistant (Ollama or Grok xAI; rules Q&A + DM/solo board tools e.g. “camp and 5 goblins”; optional selected piece notes; piece-library stats when DM names HP ranges)
 - Square checkerboard grid (`q`,`r` = column/row) with pan + scroll zoom (top-down); zoom-out fits the whole map
 - **Assets** floating window: categories (Tiles | Props | Tokens | Monsters), theme/level filters, name search, thumbnail palette
 - Drag an asset onto a cell, or click an asset then click a cell
