@@ -203,7 +203,7 @@ the title bar; multiple sheets can be open at once.
 - **Piece sheet / pin library:** Select piece → index-card notes + freeform stats; pin by assetId in localStorage; **Pinned** floating window list/edit/place (local only, no WS)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Assets:** live Open Kit `passed/` via room server (`OPENKIT_KIT_PATH`), else curated demo pack (~18) under `public/assets/demo/`
-- **Shoulder:** tray button → floating assistant (Ollama or Grok xAI; rules Q&A + DM/solo board tools e.g. “camp and 5 goblins”; optional selected piece notes; piece-library stats when DM names HP ranges)
+- **AI:** small sidebar **AI** button opens a floating panel (Shoulder chat, local Ollama setup, Grok connector setup, copy-paste grok.com prompts)
 - Square checkerboard grid (`q`,`r` = column/row) with pan + scroll zoom (top-down); zoom-out fits the whole map
 - **Assets** floating window: categories (Tiles | Props | Tokens | Monsters), theme/level filters, name search, thumbnail palette
 - Drag an asset onto a cell, or click an asset then click a cell

@@ -13,7 +13,7 @@ import { LibraryTray } from './components/LibraryTray'
 import { AssetBrowserPanel } from './components/AssetBrowserPanel'
 import { FloatingWindow } from './components/FloatingWindow'
 import { RulesFolioWindow } from './components/RulesFolioWindow'
-import { ShoulderChatWindow } from './components/ShoulderChatWindow'
+import { AiPanel } from './components/AiPanel'
 import { Sidebar } from './components/Sidebar'
 import { generateSquareMap, cellKey, squareCount } from './hex'
 import type { Role } from './multiplayer/protocol'
@@ -105,8 +105,8 @@ function App() {
   const [assetsBrowseZ, setAssetsBrowseZ] = useState(20)
   const [pinnedBrowseOpen, setPinnedBrowseOpen] = useState(false)
   const [pinnedBrowseZ, setPinnedBrowseZ] = useState(20)
-  const [shoulderOpen, setShoulderOpen] = useState(false)
-  const [shoulderZ, setShoulderZ] = useState(20)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiZ, setAiZ] = useState(20)
   /** Bite 6: room overview → table well on first load / New board. */
   const [establishingPhase, setEstablishingPhase] = useState<
     'overview' | 'arriving' | 'settled'
@@ -181,7 +181,7 @@ function App() {
     setRulesFolioOpen(false)
     setAssetsBrowseOpen(false)
     setPinnedBrowseOpen(false)
-    setShoulderOpen(false)
+    setAiOpen(false)
     setLocalRadius(DEFAULT_RADIUS)
     setHoverHex(null)
     if (!shouldPlayEstablishingShot(true)) {
@@ -602,7 +602,7 @@ function App() {
         onMapRadiusChange={onMapRadiusChange}
         assetsOpen={assetsBrowseOpen}
         pinnedOpen={pinnedBrowseOpen}
-        shoulderOpen={shoulderOpen}
+        aiOpen={aiOpen}
         pinnedCount={Object.keys(pieceLibrary).length}
         onOpenAssets={() => {
           setAssetsBrowseOpen(true)
@@ -614,10 +614,10 @@ function App() {
           floatZRef.current += 1
           setPinnedBrowseZ(floatZRef.current)
         }}
-        onOpenShoulder={() => {
-          setShoulderOpen(true)
+        onOpenAi={() => {
+          setAiOpen(true)
           floatZRef.current += 1
-          setShoulderZ(floatZRef.current)
+          setAiZ(floatZRef.current)
         }}
         placementHint={
           selectedAssetId
@@ -759,7 +759,7 @@ function App() {
                 initialX={48 + (i % 4) * 36}
                 initialY={56 + (i % 4) * 28}
                 width={360}
-                maxHeight={620}
+                maxHeight={660}
                 zIndex={sheetZ[assetId] ?? 20 + i}
                 onFocus={() => focusSheet(assetId)}
                 onClose={() => closePieceSheet(assetId)}
@@ -885,29 +885,30 @@ function App() {
               />
             </FloatingWindow>
           )}
-          {shoulderOpen && (
+          {aiOpen && (
             <FloatingWindow
-              title="Shoulder"
-              ariaLabel="Shoulder assistant"
-              className="floating-shoulder"
-              initialX={280}
-              initialY={56}
-              width={400}
+              title="AI"
+              ariaLabel="AI panel — Shoulder, setup, and prompts"
+              className="floating-ai"
+              initialX={260}
+              initialY={48}
+              width={420}
               maxHeight={620}
-              zIndex={shoulderZ}
+              zIndex={aiZ}
               onFocus={() => {
                 floatZRef.current += 1
-                setShoulderZ(floatZRef.current)
+                setAiZ(floatZRef.current)
               }}
-              onClose={() => setShoulderOpen(false)}
+              onClose={() => setAiOpen(false)}
             >
-              <ShoulderChatWindow
+              <AiPanel
                 pack={displayRulesPack}
                 pieceContext={shoulderPieceContext}
                 assets={assets}
                 pieces={pieces}
                 mapRadius={mapRadius}
                 canPlaceFromChat={canPlaceFromChat}
+                roomCode={inRoom ? room.roomCode : null}
                 onPlaceActions={onShoulderPlaceActions}
                 onLibraryPatches={onShoulderLibraryPatches}
                 onUpdatePiece={onUpdatePiece}
