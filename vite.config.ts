@@ -15,6 +15,10 @@ export default defineConfig({
       '/kit': {
         target: 'http://localhost:3001',
       },
+      // Ollama chat/tags via room server (CORS-safe; env on server)
+      '/ollama': {
+        target: 'http://localhost:3001',
+      },
     },
   },
 })

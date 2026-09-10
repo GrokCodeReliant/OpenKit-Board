@@ -2416,6 +2416,20 @@
   line-height: 1.4;
 }
 
+
+.shoulder-settings-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  margin: 0 0 0.55rem;
+  color: var(--ink-muted, #c8b89a);
+}
+
+.shoulder-settings-check input {
+  accent-color: #c4a35a;
+}
+
 .shoulder-settings-label {
   display: block;
   font-weight: 600;

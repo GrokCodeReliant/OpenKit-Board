@@ -888,7 +888,7 @@ function App() {
           {shoulderOpen && (
             <FloatingWindow
               title="Shoulder"
-              ariaLabel="Shoulder local helper"
+              ariaLabel="Shoulder assistant"
               className="floating-shoulder"
               initialX={280}
               initialY={56}
@@ -910,6 +910,8 @@ function App() {
                 canPlaceFromChat={canPlaceFromChat}
                 onPlaceActions={onShoulderPlaceActions}
                 onLibraryPatches={onShoulderLibraryPatches}
+                onUpdatePiece={onUpdatePiece}
+                onMovePiece={onMovePiece}
               />
             </FloatingWindow>
           )}

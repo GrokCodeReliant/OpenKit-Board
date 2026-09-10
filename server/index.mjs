@@ -496,6 +496,67 @@ const httpServer = createServer((req, res) => {
     return
   }
 
+  // --- Ollama reverse proxy (CORS-safe for Vite client) ---
+  // Browser calls /ollama/... → this server → OPENKIT_OLLAMA_URL (default 127.0.0.1:11434)
+  const OLLAMA_UPSTREAM = (process.env.OPENKIT_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '')
+
+  if (pathname.startsWith('/ollama/')) {
+    const upstreamPath = pathname.slice('/ollama'.length) // /api/chat | /api/tags
+    if (
+      !(
+        (upstreamPath === '/api/tags' && (req.method === 'GET' || req.method === 'HEAD')) ||
+        (upstreamPath === '/api/chat' && req.method === 'POST')
+      )
+    ) {
+      res.writeHead(404, jsonHeaders)
+      res.end(JSON.stringify({ error: 'Only /ollama/api/tags and /ollama/api/chat are proxied' }))
+      return
+    }
+
+    const chunks = []
+    req.on('data', (c) => chunks.push(c))
+    req.on('end', async () => {
+      const bodyBuf = Buffer.concat(chunks)
+      const target = `${OLLAMA_UPSTREAM}${upstreamPath}${url.search || ''}`
+      try {
+        /** @type {Record<string, string>} */
+        const headers = { Accept: 'application/json' }
+        if (req.method === 'POST') {
+          headers['Content-Type'] = req.headers['content-type'] || 'application/json'
+        }
+        const upstream = await fetch(target, {
+          method: req.method === 'HEAD' ? 'GET' : req.method,
+          headers,
+          body: req.method === 'POST' ? bodyBuf : undefined,
+          signal: AbortSignal.timeout(120_000),
+        })
+        const outHeaders = {
+          'Content-Type': upstream.headers.get('content-type') || 'application/json',
+          'Cache-Control': 'no-store',
+        }
+        const buf = Buffer.from(await upstream.arrayBuffer())
+        res.writeHead(upstream.status, outHeaders)
+        if (req.method === 'HEAD') {
+          res.end()
+          return
+        }
+        res.end(buf)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        res.writeHead(502, jsonHeaders)
+        res.end(
+          JSON.stringify({
+            error: 'Ollama upstream unreachable',
+            detail: message,
+            upstream: OLLAMA_UPSTREAM,
+            hint: 'Start Ollama locally, or set OPENKIT_OLLAMA_URL',
+          }),
+        )
+      }
+    })
+    return
+  }
+
   res.writeHead(404)
   res.end('Open Kit Board room server. Connect via WebSocket /kit.')
 })
@@ -741,6 +802,7 @@ httpServer.listen(PORT, () => {
   console.log(`[openkit-board] room server on ws://localhost:${PORT}`)
   console.log(`[openkit-board] health http://localhost:${PORT}/health`)
   console.log(`[openkit-board] kit manifest http://localhost:${PORT}/kit/manifest`)
+  console.log(`[openkit-board] ollama proxy http://localhost:${PORT}/ollama/api/tags → ${process.env.OPENKIT_OLLAMA_URL || 'http://127.0.0.1:11434'}`)
   if (kitPath) {
     console.log(`[openkit-board] Open Kit path: ${kitPath}`)
   } else {
