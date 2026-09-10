@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { RulesPack } from '../rulesPack'
+import type { AssetDef, PlacedPiece } from '../types'
+import { layerForCategory } from '../types'
+import { cellKey } from '../hex'
 import {
   answerFromRulesPack,
   type ShoulderPieceContext,
 } from '../shoulderLocalHelper'
+import {
+  isPlaceIntent,
+  planPlaceFromChat,
+  playerRefusePlaceMessage,
+  type ShoulderLibraryPatch,
+  type ShoulderPlaceAction,
+} from '../shoulderPlace'
 import {
   loadShoulderOllamaUrl,
   saveShoulderOllamaUrl,
@@ -19,15 +29,36 @@ export interface ChatMessage {
 interface ShoulderChatWindowProps {
   pack: RulesPack | null
   pieceContext: ShoulderPieceContext | null
+  assets: AssetDef[]
+  pieces: PlacedPiece[]
+  mapRadius: number
+  /** Solo or DM — players get a refuse message on place intents. */
+  canPlaceFromChat: boolean
+  onPlaceActions: (actions: ShoulderPlaceAction[]) => void
+  onLibraryPatches: (patches: ShoulderLibraryPatch[]) => void
 }
 
 function newId(): string {
   return crypto.randomUUID()
 }
 
+function occupiedKeys(pieces: PlacedPiece[], layer: 'ground' | 'object'): Set<string> {
+  const s = new Set<string>()
+  for (const p of pieces) {
+    if (p.layer === layer) s.add(cellKey(p.q, p.r))
+  }
+  return s
+}
+
 export function ShoulderChatWindow({
   pack,
   pieceContext,
+  assets,
+  pieces,
+  mapRadius,
+  canPlaceFromChat,
+  onPlaceActions,
+  onLibraryPatches,
 }: ShoulderChatWindowProps) {
   const listId = useId()
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -35,7 +66,7 @@ export function ShoulderChatWindow({
       id: newId(),
       role: 'system',
       text:
-        'Local rules helper — answers from the active rules pack in this browser only. No paid API. Future: optional Ollama URL (not called yet).',
+        'Local Shoulder — rules Q&A from the active pack, plus DM/solo place & arrange from chat (demo-pack fuzzy match). No paid API. Future: optional Ollama URL (not called yet).',
     },
   ])
   const [draft, setDraft] = useState('')
@@ -56,19 +87,57 @@ export function ShoulderChatWindow({
     if (!q) return
     setDraft('')
     const userMsg: ChatMessage = { id: newId(), role: 'user', text: q }
-    const answer = answerFromRulesPack(
-      q,
-      pack?.body ?? '',
-      pack?.title ?? '',
-      pieceContext,
-    )
+
+    let assistantText: string
+
+    if (isPlaceIntent(q)) {
+      if (!canPlaceFromChat) {
+        assistantText = playerRefusePlaceMessage()
+      } else {
+        const objOcc = occupiedKeys(pieces, 'object')
+        const gndOcc = occupiedKeys(pieces, 'ground')
+        // Also treat any piece cell as soft-occupied for object stacking avoidance
+        for (const p of pieces) {
+          if (layerForCategory(p.category ?? 'props') !== 'ground') {
+            objOcc.add(cellKey(p.q, p.r))
+          }
+        }
+        const planned = planPlaceFromChat(q, assets, mapRadius, objOcc, gndOcc)
+        assistantText = planned.text
+        if (planned.actions.length) {
+          onPlaceActions(planned.actions)
+        }
+        if (planned.libraryPatches.length) {
+          onLibraryPatches(planned.libraryPatches)
+        }
+      }
+    } else {
+      const answer = answerFromRulesPack(
+        q,
+        pack?.body ?? '',
+        pack?.title ?? '',
+        pieceContext,
+      )
+      assistantText = answer.text
+    }
+
     const assistantMsg: ChatMessage = {
       id: newId(),
       role: 'assistant',
-      text: answer.text,
+      text: assistantText,
     }
     setMessages((prev) => [...prev, userMsg, assistantMsg])
-  }, [draft, pack, pieceContext])
+  }, [
+    draft,
+    pack,
+    pieceContext,
+    canPlaceFromChat,
+    pieces,
+    assets,
+    mapRadius,
+    onPlaceActions,
+    onLibraryPatches,
+  ])
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -85,11 +154,12 @@ export function ShoulderChatWindow({
   return (
     <div className="shoulder-chat">
       <div className="shoulder-banner" role="status">
-        <strong>Local rules helper</strong>
+        <strong>Local Shoulder</strong>
         <span>
           {packLabel
-            ? ` · context: ${packLabel}`
-            : ' · no pack loaded — Load Kit Sparks first'}
+            ? ` · rules: ${packLabel}`
+            : ' · no pack loaded — Load Kit Sparks for Q&A'}
+          {canPlaceFromChat ? ' · place: on (DM/solo)' : ' · place: DM only'}
           {pieceContext?.displayName
             ? ` · piece: ${pieceContext.displayName}`
             : ''}
@@ -132,9 +202,13 @@ export function ShoulderChatWindow({
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder={
-            pack
-              ? 'Ask about Fighter, Rogue, Guard, HP…'
-              : 'Load a rules pack, then ask…'
+            canPlaceFromChat
+              ? pack
+                ? 'Ask rules, or “put a fae well and 3 imps around it”…'
+                : 'Place: “camp with 5 imps” — or load a rules pack for Q&A…'
+              : pack
+                ? 'Ask about Fighter, Rogue, Guard, HP…'
+                : 'Load a rules pack, then ask…'
           }
           aria-label="Shoulder question"
           aria-controls={listId}
@@ -162,9 +236,9 @@ export function ShoulderChatWindow({
       {settingsOpen && (
         <div className="shoulder-settings" aria-label="Shoulder settings">
           <p className="shoulder-settings-note">
-            Bite 1 uses the <strong>local rules helper</strong> only (no
-            network). Optional Ollama / OpenAI-compatible URL is stored for a
-            later bite — it is <em>not called</em> yet.
+            Bite 2 uses the <strong>local helper</strong> only (rules Q&A + DM
+            place/arrange). No network. Optional Ollama / OpenAI-compatible URL
+            is stored for a later bite — it is <em>not called</em> yet.
             {envUrl ? (
               <>
                 {' '}
