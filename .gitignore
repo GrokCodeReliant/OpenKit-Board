@@ -29,3 +29,7 @@ dist-ssr
 !.env.example
 
 .mcp-token
+
+# Local tooling (portable gh, etc.)
+.tools/
+.server-oauth-*.log
