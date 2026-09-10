@@ -151,7 +151,7 @@ export function buildSystemPrompt(opts: {
 
   const toolGuide = opts.canPlace
     ? `Tool guidance:
-- Prefer search_assets(query) then place_pieces with exact assetId values from results. Never invent asset ids.
+- Prefer search_assets(query) then place_pieces({ placements: [{assetId,q,r}, ...] }). Fuzzy names like "goblin" are OK; prefer ids from search when known.
 - Rough layouts are fine; the DM will mouse-finish.
 - For "camp + N goblins/imps around it": search for camp/toadstool/lantern AND goblin/imp, place camp near origin, then place_pieces with ring helper or explicit coords.
 - Board is a square grid: q = column, r = row; valid cells satisfy |q|<=radius and |r|<=radius.

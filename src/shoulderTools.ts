@@ -90,21 +90,40 @@ export function shoulderToolDefs(canPlace: boolean) {
       function: {
         name: 'place_pieces',
         description:
-          `Place kit assets on the square board. Pass concrete {assetId,q,r} from search_assets results. Cap ${MAX_PLACE_PER_CALL} per call. Rough layouts OK — DM will mouse-finish. Optional ring helper: count + centerQ/centerR + ringRadius places copies around a center.`,
+          `Place kit assets on the square board via placements: [{assetId|name,q,r}]. assetId may be a fuzzy name (e.g. goblin). q/r accept x/y aliases. Cap ${MAX_PLACE_PER_CALL} per call. Optional ring helper: assetId + count + centerQ/centerR + ringRadius.`,
         parameters: {
           type: 'object',
           properties: {
+            placements: {
+              type: 'array',
+              description:
+                'Explicit placements (preferred). Each item: assetId or name, q/r (or x/y aliases).',
+              items: {
+                type: 'object',
+                properties: {
+                  assetId: { type: 'string', description: 'Kit id or fuzzy name e.g. goblin' },
+                  name: { type: 'string', description: 'Asset display name if id unknown' },
+                  q: { type: 'number', description: 'Column (square grid)' },
+                  r: { type: 'number', description: 'Row (square grid)' },
+                  x: { type: 'number', description: 'Alias for q' },
+                  y: { type: 'number', description: 'Alias for r' },
+                },
+                required: ['assetId'],
+              },
+            },
             pieces: {
               type: 'array',
-              description: 'Explicit placements',
+              description: 'Alias for placements (legacy)',
               items: {
                 type: 'object',
                 properties: {
                   assetId: { type: 'string' },
-                  q: { type: 'number', description: 'Column (square grid)' },
-                  r: { type: 'number', description: 'Row (square grid)' },
+                  name: { type: 'string' },
+                  q: { type: 'number' },
+                  r: { type: 'number' },
+                  x: { type: 'number' },
+                  y: { type: 'number' },
                 },
-                required: ['assetId', 'q', 'r'],
               },
             },
             assetId: {
@@ -257,6 +276,59 @@ function ringCells(
   return out
 }
 
+/**
+ * Deep-coerce tool args from models that stringify nested JSON
+ * (common with llama3.1) and leave placements/pieces as strings.
+ *
+ * Failing payload example that must work after coerce + place_pieces:
+ *   { placements: '[{"assetId":"goblin","x":2,"y":-1}]' }
+ * → goblin fuzzy-resolves via resolveAsset → e.g. token-imp-skirmisher / monster-goblin.
+ */
+export function coerceToolArgs(
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(args)) {
+    out[key] = coerceValue(value)
+  }
+  return out
+}
+
+function coerceValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
+      try {
+        return coerceValue(JSON.parse(trimmed) as unknown)
+      } catch {
+        return value
+      }
+    }
+    return value
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => coerceValue(item))
+  }
+  if (value && typeof value === 'object') {
+    return coerceToolArgs(value as Record<string, unknown>)
+  }
+  return value
+}
+
+function placementRows(args: Record<string, unknown>): unknown[] {
+  const raw = args.placements ?? args.pieces
+  if (Array.isArray(raw)) return raw
+  return []
+}
+
+function cellCoord(row: Record<string, unknown>, primary: string, alias: string): number {
+  const v = row[primary] ?? row[alias]
+  return Number(v)
+}
+
 function resolveAsset(
   assets: AssetDef[],
   assetId?: string,
@@ -292,10 +364,11 @@ export interface ToolExecExtra {
 
 export function executeShoulderTool(
   name: string,
-  args: Record<string, unknown>,
+  rawArgs: Record<string, unknown>,
   ctx: ShoulderToolContext,
   extra: ToolExecExtra,
 ): string {
+  const args = coerceToolArgs(rawArgs ?? {})
   try {
     switch (name) {
       case 'search_assets': {
@@ -341,26 +414,48 @@ export function executeShoulderTool(
           })
         }
         const actions: ShoulderPlaceAction[] = []
-        const rawPieces = Array.isArray(args.pieces) ? args.pieces : []
+        // Models + schema use `placements`; older prompts used `pieces`.
+        // coerceToolArgs already JSON.parsed stringified arrays.
+        const rawPieces = placementRows(args)
         for (const raw of rawPieces) {
           if (!raw || typeof raw !== 'object') continue
           const row = raw as Record<string, unknown>
-          const assetId = String(row.assetId ?? '')
-          const q = Number(row.q)
-          const r = Number(row.r)
-          const asset = ctx.assets.find((a) => a.id === assetId)
+          const idHint =
+            row.assetId != null && String(row.assetId).trim()
+              ? String(row.assetId)
+              : undefined
+          const nameHint =
+            row.name != null && String(row.name).trim()
+              ? String(row.name)
+              : undefined
+          const q = cellCoord(row, 'q', 'x')
+          const r = cellCoord(row, 'r', 'y')
+          const asset = resolveAsset(ctx.assets, idHint, nameHint)
           if (!asset || !Number.isFinite(q) || !Number.isFinite(r)) continue
           if (!inSquareMap(q, r, ctx.mapRadius)) continue
-          actions.push({ assetId, assetName: asset.name, q, r })
+          actions.push({
+            assetId: asset.id,
+            assetName: asset.name,
+            q,
+            r,
+            substitutedFrom:
+              idHint && idHint !== asset.id && !asset.name.toLowerCase().includes(idHint.toLowerCase())
+                ? idHint
+                : undefined,
+          })
           if (actions.length >= MAX_PLACE_PER_CALL) break
         }
 
         // Ring helper
-        if (actions.length < MAX_PLACE_PER_CALL && args.assetId && args.count) {
-          const asset = resolveAsset(ctx.assets, String(args.assetId))
+        if (actions.length < MAX_PLACE_PER_CALL && (args.assetId || args.name) && args.count) {
+          const asset = resolveAsset(
+            ctx.assets,
+            args.assetId != null ? String(args.assetId) : undefined,
+            args.name != null ? String(args.name) : undefined,
+          )
           if (asset) {
-            const centerQ = Number(args.centerQ ?? 0)
-            const centerR = Number(args.centerR ?? 0)
+            const centerQ = Number(args.centerQ ?? args.centerX ?? 0)
+            const centerR = Number(args.centerR ?? args.centerY ?? 0)
             const cells = ringCells(
               centerQ,
               centerR,
@@ -422,8 +517,10 @@ export function executeShoulderTool(
         if (typeof args.editUnlocked === 'boolean') {
           patch.editUnlocked = args.editUnlocked
         }
-        const moveQ = typeof args.q === 'number' && Number.isFinite(args.q) ? args.q : null
-        const moveR = typeof args.r === 'number' && Number.isFinite(args.r) ? args.r : null
+        const qRaw = args.q ?? args.x
+        const rRaw = args.r ?? args.y
+        const moveQ = typeof qRaw === 'number' && Number.isFinite(qRaw) ? qRaw : null
+        const moveR = typeof rRaw === 'number' && Number.isFinite(rRaw) ? rRaw : null
         const updated: string[] = []
         for (const p of targets) {
           if (Object.keys(patch).length) ctx.onUpdatePiece(p.id, patch)
