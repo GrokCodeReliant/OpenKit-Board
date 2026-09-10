@@ -17,14 +17,14 @@ interface SidebarProps {
   onMapRadiusChange: (n: number) => void
   roomSlot?: ReactNode
   rulesSlot?: ReactNode
-  /** Compact browse openers (Assets / Pinned / Shoulder). */
+  /** Compact browse openers (Assets / Pinned). */
   assetsOpen: boolean
   pinnedOpen: boolean
-  shoulderOpen: boolean
+  aiOpen: boolean
   pinnedCount: number
   onOpenAssets: () => void
   onOpenPinned: () => void
-  onOpenShoulder: () => void
+  onOpenAi: () => void
   placementHint?: string
   controlHint?: string
 }
@@ -39,11 +39,11 @@ export function Sidebar({
   rulesSlot,
   assetsOpen,
   pinnedOpen,
-  shoulderOpen,
+  aiOpen,
   pinnedCount,
   onOpenAssets,
   onOpenPinned,
-  onOpenShoulder,
+  onOpenAi,
   placementHint,
   controlHint,
 }: SidebarProps) {
@@ -58,7 +58,7 @@ export function Sidebar({
                 ? roleLabel === 'dm'
                   ? 'DM · shared table'
                   : 'Player · tokens you own'
-                : 'Piece tray · demo pack · local Shoulder'}
+                : 'Piece tray · demo pack · local AI'}
             </p>
           </header>
 
@@ -85,17 +85,6 @@ export function Sidebar({
               {pinnedCount > 0 ? (
                 <span className="tray-browse-count">{pinnedCount}</span>
               ) : null}
-            </button>
-            <button
-              type="button"
-              className={
-                shoulderOpen ? 'tray-browse-btn active' : 'tray-browse-btn'
-              }
-              aria-pressed={shoulderOpen}
-              onClick={onOpenShoulder}
-              title="Private local rules helper (this browser only)"
-            >
-              Shoulder
             </button>
           </div>
 
@@ -140,6 +129,19 @@ export function Sidebar({
                 'Select piece → floating sheet · Del removes · Pin notes locally'}
             </p>
           </footer>
+
+          <div className="sidebar-ai-dock">
+            <button
+              type="button"
+              className={aiOpen ? 'sidebar-ai-btn active' : 'sidebar-ai-btn'}
+              aria-pressed={aiOpen}
+              aria-label="Open AI panel"
+              title="Shoulder, local model & Grok connector setup"
+              onClick={onOpenAi}
+            >
+              AI
+            </button>
+          </div>
         </div>
       </div>
     </aside>
