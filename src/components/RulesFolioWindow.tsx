@@ -10,12 +10,14 @@ export function RulesFolioWindow({ pack }: RulesFolioWindowProps) {
     <div className="rules-folio-floating">
       <div className="rules-folio-meta">
         <strong className="rules-folio-title">{pack.title}</strong>
-        <span className="rules-license" title={pack.license}>
-          {pack.license}
-        </span>
+        {pack.license.trim() && (
+          <span className="rules-license" title={pack.license}>
+            {pack.license}
+          </span>
+        )}
       </div>
       {pack.attribution && (
-        <p className="rules-meta">Attribution: {pack.attribution}</p>
+        <p className="rules-meta">Note / credit: {pack.attribution}</p>
       )}
       {pack.sourceUrl && (
         <p className="rules-meta">

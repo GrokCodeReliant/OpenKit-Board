@@ -7,6 +7,7 @@ export interface RulesPack {
   title: string
   body: string
   format: RulesPackFormat
+  /** Optional; kept for older packs. Import UX no longer requires a license. */
   license: string
   sourceUrl?: string
   attribution?: string
@@ -23,21 +24,26 @@ export const ACTIVE_RULES_PACK_KEY = 'okb.activeRulesPack.v1'
 export const BODY_SOFT_LIMIT = 100_000
 export const BODY_HARD_LIMIT = 500_000
 
+const DEFAULT_LICENSE = 'private session'
+
 export function loadActiveRulesPack(): RulesPack | null {
   try {
     const raw = localStorage.getItem(ACTIVE_RULES_PACK_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as RulesPack
+    const parsed = JSON.parse(raw) as Partial<RulesPack>
     if (
       !parsed ||
       typeof parsed.id !== 'string' ||
       typeof parsed.title !== 'string' ||
-      typeof parsed.body !== 'string' ||
-      typeof parsed.license !== 'string'
+      typeof parsed.body !== 'string'
     ) {
       return null
     }
-    return parsed
+    return {
+      ...(parsed as RulesPack),
+      license:
+        typeof parsed.license === 'string' ? parsed.license : DEFAULT_LICENSE,
+    }
   } catch {
     return null
   }
@@ -77,7 +83,8 @@ export async function sha256Hex(text: string): Promise<string> {
 export async function createRulesPack(input: {
   title: string
   body: string
-  license: string
+  /** Optional; defaults to "private session". */
+  license?: string
   format: RulesPackFormat
   sourceUrl?: string
   attribution?: string
@@ -96,12 +103,13 @@ export async function createRulesPack(input: {
       `Rules pack too large for table sync (max ~${BODY_HARD_LIMIT.toLocaleString()} bytes). Shorten the text and try again.`,
     )
   }
+  const licenseRaw = input.license?.trim() ?? ''
   return {
     id: crypto.randomUUID(),
     title: input.title.trim() || 'Untitled rules pack',
     body,
     format: input.format,
-    license: input.license.trim(),
+    license: licenseRaw || DEFAULT_LICENSE,
     sourceUrl: input.sourceUrl?.trim() || undefined,
     attribution: input.attribution?.trim() || undefined,
     rightsAffirmedAt: now,
