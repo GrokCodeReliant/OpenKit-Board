@@ -28,7 +28,6 @@ export function LibraryTray({
 
   return (
     <div className="library-tray">
-      <p className="rules-label">Pinned library</p>
       {entries.length === 0 ? (
         <p className="rules-empty">
           Select a board piece, jot notes, and pin — they stay in this browser.

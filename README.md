@@ -87,7 +87,7 @@ Select a placed piece to open a floating **index card** window over the table
 the title bar; multiple sheets can be open at once.
 
 - **Pin / Save** writes to browser `localStorage`, keyed by `assetId` so notes stick across boards
-- **Pinned library** lists thumb + title; open to edit; **Place** selects that asset for the board when allowed
+- **Pinned library** opens as a floating window (thumb + title); open to edit; **Place** selects that asset for the board when allowed
 - Selecting a board piece whose asset is pinned prefills the sheet from the library
 - Library stays **local to this browser** — not synced over WebSocket (yet)
 
@@ -97,9 +97,9 @@ the title bar; multiple sheets can be open at once.
 - **Room shell:** original CSS hobby-room backdrop (warm wall / soft shelves / lamp + window glow — not a Demeo clone)
 - Heavy vignette keeps focus on the table
 - Toggle **Room / Dim room / Void** (persists in `localStorage`)
-- **Material tray:** sidebar restyled as a wood-edged felt piece tray with paper tabs/labels (categories, filters, rooms, rules folio, pin library, radius unchanged)
+- **Material tray:** sidebar restyled as a wood-edged felt piece tray; **Assets** / **Pinned** open floating browse windows (filters + palette stay out of the permanent tray); rooms, rules folio, radius unchanged
 - **Floating folios:** piece sheets + rules pack body open as draggable windows over the play area
-- **Camera:** flat top-down only — presets **Top-down (default) / Close** (zoom + table scale, no tilt); pan + wheel zoom kept; min zoom fits the **entire** board (including radius 40); zoom/scale limits leave a strip of table rim in frame (persists in `localStorage`)
+- **Camera:** flat **top-down only** (Close / tilt presets removed); pan + **mouse-wheel zoom**; min zoom fits the **entire** board (including radius 40); table scale keeps the board top visible under browser chrome
 - **Foley + ambience:** place/move/delete one-shots + low room tone (mute persists); room tone crossfades slightly closer when zoomed in
 - **Establishing moment:** first load eases ~1.2s from room overview → table well; skipped on repeat visits (`localStorage`); **New board** clears the solo board and replays the arrival (respects reduced-motion)
 - **Seat pads:** four decorative empty seat mats around the table rim (silhouettes/tokens); local near seat marked **You** — no networking
@@ -107,15 +107,14 @@ the title bar; multiple sheets can be open at once.
 
 ## What works
 
-- **Presence:** table well + room/dim/void backdrop + material piece tray + top-down zoom presets + foley/ambience + establishing arrival + decorative seat pads + selected contact shadow
+- **Presence:** table well + room/dim/void backdrop + material piece tray + top-down framing + foley/ambience + establishing arrival + decorative seat pads + selected contact shadow
 - **Multiplayer rooms:** Host/Join with short code; DM + players sync mapRadius + pieces over WebSocket
 - **Rules pack:** Paste/upload .txt/.md/.pdf + license + rights checkbox; PDF → text client-side; solo localStorage; DM syncs room pack to players (read-only)
-- **Piece sheet / pin library:** Select piece → index-card notes + freeform stats; pin by assetId in localStorage; library tray list/edit/place (local only, no WS)
+- **Piece sheet / pin library:** Select piece → index-card notes + freeform stats; pin by assetId in localStorage; **Pinned** floating window list/edit/place (local only, no WS)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story, no AI)
-- Square checkerboard grid (`q`,`r` = column/row) with pan + scroll zoom + top-down zoom presets; zoom-out fits the whole map
-- Sidebar categories: Tiles | Props | Tokens | Monsters
-- Filter assets by name; thumbnail palette
+- Square checkerboard grid (`q`,`r` = column/row) with pan + scroll zoom (top-down); zoom-out fits the whole map
+- **Assets** floating window: categories (Tiles | Props | Tokens | Monsters), theme/level filters, name search, thumbnail palette
 - Drag an asset onto a cell, or click an asset then click a cell
 - Select placed pieces, drag to move; Delete / Backspace removes
 - Tiles render as a ground layer under props / tokens / monsters

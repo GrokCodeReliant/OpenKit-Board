@@ -3,7 +3,6 @@
  * All sounds are generated procedurally in-repo (no third-party packs).
  */
 
-import type { CameraView } from './cameraViews'
 import { HEX_ZOOM_MAX, HEX_ZOOM_MIN } from './cameraViews'
 
 const MUTE_KEY = 'openkit-board-muted'
@@ -329,16 +328,15 @@ export const boardAudio = {
     applyProximity(proximity)
   },
 
-  /** Map camera preset + hex zoom into a proximity blend. */
-  syncFromView(view: CameraView, hexZoom?: number): void {
-    const base = view === 'close' ? 0.85 : view === 'top' ? 0.05 : 0.25
+  /** Map hex zoom into a proximity blend (top-down only; wheel zoom drives lean-in). */
+  syncFromZoom(hexZoom?: number): void {
+    const base = 0.05
     let zoomFactor = 0
     if (typeof hexZoom === 'number' && Number.isFinite(hexZoom)) {
       const span = HEX_ZOOM_MAX - HEX_ZOOM_MIN || 1
       // Fit-to-view may go below comfort min on large boards — clamp blend 0..1
       zoomFactor = Math.min(1, Math.max(0, (hexZoom - HEX_ZOOM_MIN) / span))
     }
-    // Prefer view bed, nudge with live scroll zoom
     this.setProximity(Math.min(1, base * 0.7 + zoomFactor * 0.55))
   },
 }

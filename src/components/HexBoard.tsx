@@ -5,8 +5,7 @@ import type { AssetDef, HexCoord, PieceTransform, PlacedPiece } from '../types'
 import { pieceTransform } from '../types'
 import {
   clampBoardZoom,
-  VIEW_PRESETS,
-  type CameraView,
+  DEFAULT_HEX_ZOOM,
 } from '../cameraViews'
 import {
   CELL_SIZE,
@@ -35,7 +34,6 @@ interface HexBoardProps {
   onMovePiece: (id: string, q: number, r: number) => void
   onUpdatePiece: (id: string, patch: PieceTransformPatch) => void
   onDropAsset: (assetId: string, q: number, r: number) => void
-  cameraView: CameraView
   /** Optional live board zoom for ambience crossfade (Bite 5). */
   onZoomChange?: (zoom: number) => void
 }
@@ -245,14 +243,13 @@ export function HexBoard({
   onMovePiece,
   onUpdatePiece,
   onDropAsset,
-  cameraView,
   onZoomChange,
 }: HexBoardProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const didCenterRef = useRef(false)
   const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(() => VIEW_PRESETS[cameraView].hexZoom)
+  const [zoom, setZoom] = useState(() => DEFAULT_HEX_ZOOM)
   const [dragging, setDragging] = useState(false)
   const [viewSize, setViewSize] = useState({ w: 0, h: 0 })
   /** Live transform preview while dragging handles (committed via onUpdatePiece). */
