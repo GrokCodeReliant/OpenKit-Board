@@ -13,6 +13,7 @@ import { LibraryTray } from './components/LibraryTray'
 import { AssetBrowserPanel } from './components/AssetBrowserPanel'
 import { FloatingWindow } from './components/FloatingWindow'
 import { RulesFolioWindow } from './components/RulesFolioWindow'
+import { ShoulderChatWindow } from './components/ShoulderChatWindow'
 import { Sidebar } from './components/Sidebar'
 import { generateSquareMap, cellKey, squareCount } from './hex'
 import type { Role } from './multiplayer/protocol'
@@ -31,6 +32,7 @@ import {
   removeLibraryEntry,
   upsertLibraryEntry,
 } from './pieceLibrary'
+import type { ShoulderPieceContext } from './shoulderLocalHelper'
 import type { RoomMode } from './roomShell'
 import { loadRoomMode, saveRoomMode } from './roomShell'
 import { BOARD_SCALE, DEFAULT_HEX_ZOOM } from './cameraViews'
@@ -97,6 +99,8 @@ function App() {
   const [assetsBrowseZ, setAssetsBrowseZ] = useState(20)
   const [pinnedBrowseOpen, setPinnedBrowseOpen] = useState(false)
   const [pinnedBrowseZ, setPinnedBrowseZ] = useState(20)
+  const [shoulderOpen, setShoulderOpen] = useState(false)
+  const [shoulderZ, setShoulderZ] = useState(20)
   /** Bite 6: room overview → table well on first load / New board. */
   const [establishingPhase, setEstablishingPhase] = useState<
     'overview' | 'arriving' | 'settled'
@@ -171,6 +175,7 @@ function App() {
     setRulesFolioOpen(false)
     setAssetsBrowseOpen(false)
     setPinnedBrowseOpen(false)
+    setShoulderOpen(false)
     setLocalRadius(DEFAULT_RADIUS)
     setHoverHex(null)
     if (!shouldPlayEstablishingShot(true)) {
@@ -459,6 +464,23 @@ function App() {
       : activeRulesPack
   const rulesReadOnly = inRoom && room.role !== 'dm'
 
+  // Optional Shoulder context: notes from selected board piece's library entry.
+  const shoulderPieceContext: ShoulderPieceContext | null = (() => {
+    if (!selectedPieceId) return null
+    const piece = pieces.find((p) => p.id === selectedPieceId)
+    if (!piece) return null
+    const entry = getLibraryEntry(pieceLibrary, piece.assetId)
+    const asset = assetsById.get(piece.assetId)
+    const displayName =
+      entry?.displayName || asset?.name || piece.assetId
+    const notes = entry?.notes?.trim() || ''
+    const statsBlob = entry?.statsBlob?.trim() || ''
+    if (!notes && !statsBlob) {
+      return { displayName, notes: '', statsBlob: '' }
+    }
+    return { displayName, notes, statsBlob }
+  })()
+
   const onAttachRulesPack = useCallback(
     (pack: RulesPack) => {
       // Keep a personal local copy so solo offline still works after leave.
@@ -517,6 +539,7 @@ function App() {
         onMapRadiusChange={onMapRadiusChange}
         assetsOpen={assetsBrowseOpen}
         pinnedOpen={pinnedBrowseOpen}
+        shoulderOpen={shoulderOpen}
         pinnedCount={Object.keys(pieceLibrary).length}
         onOpenAssets={() => {
           setAssetsBrowseOpen(true)
@@ -527,6 +550,11 @@ function App() {
           setPinnedBrowseOpen(true)
           floatZRef.current += 1
           setPinnedBrowseZ(floatZRef.current)
+        }}
+        onOpenShoulder={() => {
+          setShoulderOpen(true)
+          floatZRef.current += 1
+          setShoulderZ(floatZRef.current)
         }}
         placementHint={
           selectedAssetId
@@ -788,6 +816,28 @@ function App() {
                 inRoom={inRoom}
                 onOpenSheet={onOpenLibrarySheet}
                 onPlace={onPlaceFromLibrary}
+              />
+            </FloatingWindow>
+          )}
+          {shoulderOpen && (
+            <FloatingWindow
+              title="Shoulder"
+              ariaLabel="Shoulder local rules helper"
+              className="floating-shoulder"
+              initialX={280}
+              initialY={56}
+              width={400}
+              maxHeight={620}
+              zIndex={shoulderZ}
+              onFocus={() => {
+                floatZRef.current += 1
+                setShoulderZ(floatZRef.current)
+              }}
+              onClose={() => setShoulderOpen(false)}
+            >
+              <ShoulderChatWindow
+                pack={displayRulesPack}
+                pieceContext={shoulderPieceContext}
               />
             </FloatingWindow>
           )}

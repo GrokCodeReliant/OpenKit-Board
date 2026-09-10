@@ -17,12 +17,14 @@ interface SidebarProps {
   onMapRadiusChange: (n: number) => void
   roomSlot?: ReactNode
   rulesSlot?: ReactNode
-  /** Compact browse openers (Assets / Pinned). */
+  /** Compact browse openers (Assets / Pinned / Shoulder). */
   assetsOpen: boolean
   pinnedOpen: boolean
+  shoulderOpen: boolean
   pinnedCount: number
   onOpenAssets: () => void
   onOpenPinned: () => void
+  onOpenShoulder: () => void
   placementHint?: string
   controlHint?: string
 }
@@ -37,9 +39,11 @@ export function Sidebar({
   rulesSlot,
   assetsOpen,
   pinnedOpen,
+  shoulderOpen,
   pinnedCount,
   onOpenAssets,
   onOpenPinned,
+  onOpenShoulder,
   placementHint,
   controlHint,
 }: SidebarProps) {
@@ -54,7 +58,7 @@ export function Sidebar({
                 ? roleLabel === 'dm'
                   ? 'DM · shared table'
                   : 'Player · tokens you own'
-                : 'Piece tray · demo pack · no AI'}
+                : 'Piece tray · demo pack · local Shoulder'}
             </p>
           </header>
 
@@ -81,6 +85,17 @@ export function Sidebar({
               {pinnedCount > 0 ? (
                 <span className="tray-browse-count">{pinnedCount}</span>
               ) : null}
+            </button>
+            <button
+              type="button"
+              className={
+                shoulderOpen ? 'tray-browse-btn active' : 'tray-browse-btn'
+              }
+              aria-pressed={shoulderOpen}
+              onClick={onOpenShoulder}
+              title="Private local rules helper (this browser only)"
+            >
+              Shoulder
             </button>
           </div>
 
