@@ -1,15 +1,15 @@
-/** Flat top-down camera presets (pan + zoom). No board tilt. */
+/** Flat top-down board framing (pan + wheel zoom). No Close / tilt presets. */
 
 import { boardExtent, CELL_SIZE } from './hex'
 
-export type CameraView = 'top' | 'close'
+/** Default board zoom (wheel adjusts from here). */
+export const DEFAULT_HEX_ZOOM = 0.85
 
-export const CAMERA_VIEWS: { id: CameraView; label: string }[] = [
-  { id: 'top', label: 'Top-down' },
-  { id: 'close', label: 'Close' },
-]
-
-export const DEFAULT_CAMERA_VIEW: CameraView = 'top'
+/**
+ * Scale of the whole table object in the stage.
+ * Kept ≤ 1 so the board top stays visible under browser chrome.
+ */
+export const BOARD_SCALE = 0.98
 
 /**
  * Comfortable zoom floor when the board already fits the viewport.
@@ -22,43 +22,6 @@ export const BOARD_ZOOM_MAX = 1.75
 export const HEX_ZOOM_MIN = BOARD_ZOOM_MIN_COMFORT
 /** @deprecated Use BOARD_ZOOM_MAX. */
 export const HEX_ZOOM_MAX = BOARD_ZOOM_MAX
-
-export interface ViewPreset {
-  /** Target board zoom when the preset is selected. */
-  hexZoom: number
-  /**
-   * Scale of the whole table object in the stage.
-   * Kept ≤ ~1.1 so a strip of wood rim stays in frame on Close.
-   */
-  boardScale: number
-}
-
-export const VIEW_PRESETS: Record<CameraView, ViewPreset> = {
-  top: { hexZoom: 0.85, boardScale: 0.98 },
-  close: { hexZoom: 1.35, boardScale: 1.06 },
-}
-
-const STORAGE_KEY = 'openkit-board-camera-view'
-
-export function loadCameraView(): CameraView {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === 'top' || raw === 'close') return raw
-    // Legacy "tilt" (and anything else) → flat top-down
-    if (raw === 'tilt') return 'top'
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_CAMERA_VIEW
-}
-
-export function saveCameraView(view: CameraView): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, view)
-  } catch {
-    /* ignore */
-  }
-}
 
 /**
  * Zoom that fits the full square board into the viewport (with a small pad).

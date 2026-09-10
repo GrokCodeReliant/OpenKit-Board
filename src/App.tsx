@@ -3,7 +3,6 @@ import { loadAssetsFromManifest } from './assets'
 import { HexBoard } from './components/HexBoard'
 import { RoomPanel } from './components/RoomPanel'
 import { PresenceToggle } from './components/PresenceToggle'
-import { ViewPresets } from './components/ViewPresets'
 import { MuteToggle } from './components/MuteToggle'
 import { NewBoardButton } from './components/NewBoardButton'
 import { SeatPads } from './components/SeatPads'
@@ -11,6 +10,7 @@ import { RoomBackdrop } from './components/RoomBackdrop'
 import { RulesPackPanel } from './components/RulesPackPanel'
 import { PieceSheetPanel } from './components/PieceSheetPanel'
 import { LibraryTray } from './components/LibraryTray'
+import { AssetBrowserPanel } from './components/AssetBrowserPanel'
 import { FloatingWindow } from './components/FloatingWindow'
 import { RulesFolioWindow } from './components/RulesFolioWindow'
 import { Sidebar } from './components/Sidebar'
@@ -33,12 +33,7 @@ import {
 } from './pieceLibrary'
 import type { RoomMode } from './roomShell'
 import { loadRoomMode, saveRoomMode } from './roomShell'
-import type { CameraView } from './cameraViews'
-import {
-  loadCameraView,
-  saveCameraView,
-  VIEW_PRESETS,
-} from './cameraViews'
+import { BOARD_SCALE, DEFAULT_HEX_ZOOM } from './cameraViews'
 import { boardAudio, loadMuted } from './boardAudio'
 import {
   ESTABLISHING_MS,
@@ -96,9 +91,12 @@ function App() {
     loadActiveRulesPack(),
   )
   const [roomMode, setRoomMode] = useState<RoomMode>(() => loadRoomMode())
-  const [cameraView, setCameraView] = useState<CameraView>(() => loadCameraView())
   const [muted, setMuted] = useState(() => loadMuted())
-  const [hexZoom, setHexZoom] = useState(() => VIEW_PRESETS[loadCameraView()].hexZoom)
+  const [hexZoom, setHexZoom] = useState(() => DEFAULT_HEX_ZOOM)
+  const [assetsBrowseOpen, setAssetsBrowseOpen] = useState(false)
+  const [assetsBrowseZ, setAssetsBrowseZ] = useState(20)
+  const [pinnedBrowseOpen, setPinnedBrowseOpen] = useState(false)
+  const [pinnedBrowseZ, setPinnedBrowseZ] = useState(20)
   /** Bite 6: room overview → table well on first load / New board. */
   const [establishingPhase, setEstablishingPhase] = useState<
     'overview' | 'arriving' | 'settled'
@@ -113,17 +111,12 @@ function App() {
   }, [])
 
   useEffect(() => {
-    boardAudio.syncFromView(cameraView, hexZoom)
-  }, [cameraView, hexZoom])
+    boardAudio.syncFromZoom(hexZoom)
+  }, [hexZoom])
 
   const onRoomModeChange = useCallback((mode: RoomMode) => {
     setRoomMode(mode)
     saveRoomMode(mode)
-  }, [])
-
-  const onCameraViewChange = useCallback((view: CameraView) => {
-    setCameraView(view)
-    saveCameraView(view)
   }, [])
 
   const onMuteChange = useCallback((next: boolean) => {
@@ -176,6 +169,8 @@ function App() {
     setSelectedAssetId(null)
     setOpenSheetIds([])
     setRulesFolioOpen(false)
+    setAssetsBrowseOpen(false)
+    setPinnedBrowseOpen(false)
     setLocalRadius(DEFAULT_RADIUS)
     setHoverHex(null)
     if (!shouldPlayEstablishingShot(true)) {
@@ -511,43 +506,34 @@ function App() {
   return (
     <div className="app">
       <Sidebar
-        assets={assets}
-        category={category}
-        theme={theme}
-        level={level}
-        search={search}
-        selectedAssetId={selectedAssetId}
         mapRadius={mapRadius}
         radiusEditable={radiusEditable}
-        role={inRoom ? room.role : null}
         inRoom={inRoom}
+        roleLabel={inRoom ? room.role : null}
         onMapRadiusChange={onMapRadiusChange}
-        onCategoryChange={(c) => {
-          if (!canPlaceCategory(room.role, inRoom, c)) return
-          setCategory(c)
-          setSelectedAssetId(null)
+        assetsOpen={assetsBrowseOpen}
+        pinnedOpen={pinnedBrowseOpen}
+        pinnedCount={Object.keys(pieceLibrary).length}
+        onOpenAssets={() => {
+          setAssetsBrowseOpen(true)
+          floatZRef.current += 1
+          setAssetsBrowseZ(floatZRef.current)
         }}
-        onThemeChange={(t) => {
-          setTheme(t)
-          setSelectedAssetId(null)
+        onOpenPinned={() => {
+          setPinnedBrowseOpen(true)
+          floatZRef.current += 1
+          setPinnedBrowseZ(floatZRef.current)
         }}
-        onLevelChange={(l) => {
-          setLevel(l)
-          setSelectedAssetId(null)
-        }}
-        onSearchChange={setSearch}
-        onSelectAsset={(id) => {
-          if (id) {
-            const a = assetsById.get(id)
-            if (a && !canPlaceCategory(room.role, inRoom, a.category)) return
-          }
-          setSelectedAssetId(id)
-          setSelectedPieceId(null)
-        }}
-        onDragStart={(asset) => {
-          if (!canPlaceCategory(room.role, inRoom, asset.category)) return
-          setSelectedPieceId(null)
-        }}
+        placementHint={
+          selectedAssetId
+            ? 'Click a cell to place. Esc to clear.'
+            : 'Open Assets or Pinned to browse — drag onto a cell, or click then cell.'
+        }
+        controlHint={
+          inRoom && room.role === 'player'
+            ? 'Move/delete only your tokens · Del removes · Select opens floating sheet'
+            : 'Select piece → floating sheet · Del removes · Pin notes locally'
+        }
         roomSlot={
           <RoomPanel
             status={room.status}
@@ -580,22 +566,11 @@ function App() {
             }}
           />
         }
-        librarySlot={
-          <LibraryTray
-            library={pieceLibrary}
-            assetsById={assetsById}
-            role={inRoom ? room.role : null}
-            inRoom={inRoom}
-            onOpenSheet={onOpenLibrarySheet}
-            onPlace={onPlaceFromLibrary}
-          />
-        }
       />
       <main className={`main room-mode-${roomMode}`}>
         {roomMode !== 'void' && <RoomBackdrop />}
         <div className="room-vignette" aria-hidden="true" />
         <PresenceToggle mode={roomMode} onChange={onRoomModeChange} />
-        <ViewPresets view={cameraView} onChange={onCameraViewChange} />
         <MuteToggle muted={muted} onChange={onMuteChange} />
         <NewBoardButton
           disabled={inRoom || establishingPhase !== 'settled'}
@@ -621,23 +596,22 @@ function App() {
           </div>
         )}
         <div
-          className={`table-stage view-${cameraView}${
+          className={`table-stage view-top${
             establishingPhase !== 'settled' ? ' is-establishing' : ''
           }`}
         >
           <div className={`establishing-lens phase-${establishingPhase}`}>
             <div
-              className={`table-object view-${cameraView}`}
+              className="table-object view-top"
               aria-label="Game table"
               style={{
-                // Flat top-down scale only; Close still leaves a wood-rim strip in frame
-                transform: `scale(${VIEW_PRESETS[cameraView].boardScale})`,
+                // Top-down only — scale ≤1 so board top stays under browser chrome
+                transform: `scale(${BOARD_SCALE})`,
               }}
             >
               <SeatPads />
               <div className="table-well">
                 <HexBoard
-                  key={cameraView}
                   mapRadius={mapRadius}
                   assetsById={assetsById}
                   pieces={pieces}
@@ -653,7 +627,6 @@ function App() {
                   onMovePiece={onMovePiece}
                   onUpdatePiece={onUpdatePiece}
                   onDropAsset={placeAsset}
-                  cameraView={cameraView}
                   onZoomChange={onHexZoomChange}
                 />
               </div>
@@ -732,6 +705,86 @@ function App() {
               onClose={() => setRulesFolioOpen(false)}
             >
               <RulesFolioWindow pack={displayRulesPack} />
+            </FloatingWindow>
+          )}
+          {assetsBrowseOpen && (
+            <FloatingWindow
+              title="Assets"
+              ariaLabel="Asset browser"
+              className="floating-assets-browse"
+              initialX={56}
+              initialY={40}
+              width={380}
+              maxHeight={680}
+              zIndex={assetsBrowseZ}
+              onFocus={() => {
+                floatZRef.current += 1
+                setAssetsBrowseZ(floatZRef.current)
+              }}
+              onClose={() => setAssetsBrowseOpen(false)}
+            >
+              <AssetBrowserPanel
+                assets={assets}
+                category={category}
+                theme={theme}
+                level={level}
+                search={search}
+                selectedAssetId={selectedAssetId}
+                role={inRoom ? room.role : null}
+                inRoom={inRoom}
+                onCategoryChange={(c) => {
+                  if (!canPlaceCategory(room.role, inRoom, c)) return
+                  setCategory(c)
+                  setSelectedAssetId(null)
+                }}
+                onThemeChange={(t) => {
+                  setTheme(t)
+                  setSelectedAssetId(null)
+                }}
+                onLevelChange={(l) => {
+                  setLevel(l)
+                  setSelectedAssetId(null)
+                }}
+                onSearchChange={setSearch}
+                onSelectAsset={(id) => {
+                  if (id) {
+                    const a = assetsById.get(id)
+                    if (a && !canPlaceCategory(room.role, inRoom, a.category)) return
+                  }
+                  setSelectedAssetId(id)
+                  setSelectedPieceId(null)
+                }}
+                onDragStart={(asset) => {
+                  if (!canPlaceCategory(room.role, inRoom, asset.category)) return
+                  setSelectedPieceId(null)
+                }}
+              />
+            </FloatingWindow>
+          )}
+          {pinnedBrowseOpen && (
+            <FloatingWindow
+              title="Pinned"
+              ariaLabel="Pinned piece library"
+              className="floating-pinned-browse"
+              initialX={120}
+              initialY={72}
+              width={360}
+              maxHeight={560}
+              zIndex={pinnedBrowseZ}
+              onFocus={() => {
+                floatZRef.current += 1
+                setPinnedBrowseZ(floatZRef.current)
+              }}
+              onClose={() => setPinnedBrowseOpen(false)}
+            >
+              <LibraryTray
+                library={pieceLibrary}
+                assetsById={assetsById}
+                role={inRoom ? room.role : null}
+                inRoom={inRoom}
+                onOpenSheet={onOpenLibrarySheet}
+                onPlace={onPlaceFromLibrary}
+              />
             </FloatingWindow>
           )}
         </div>
