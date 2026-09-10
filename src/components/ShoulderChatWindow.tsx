@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 import type { RulesPack } from '../rulesPack'
-import type { AssetDef, PlacedPiece } from '../types'
+import type { AssetDef, PieceUpdatePatch, PlacedPiece } from '../types'
 import { layerForCategory } from '../types'
 import { cellKey } from '../hex'
 import {
@@ -15,10 +23,18 @@ import {
   type ShoulderPlaceAction,
 } from '../shoulderPlace'
 import {
-  loadShoulderOllamaUrl,
-  saveShoulderOllamaUrl,
+  DEFAULT_OLLAMA_BASE,
+  DEFAULT_OLLAMA_MODEL,
   envShoulderUrl,
+  loadShoulderOllamaEnabled,
+  loadShoulderOllamaModel,
+  loadShoulderOllamaUrl,
+  saveShoulderOllamaEnabled,
+  saveShoulderOllamaModel,
+  saveShoulderOllamaUrl,
 } from '../shoulderSettings'
+import { probeOllamaTags, runShoulderOllamaChat } from '../shoulderOllama'
+import type { ShoulderToolContext } from '../shoulderTools'
 
 export interface ChatMessage {
   id: string
@@ -32,10 +48,12 @@ interface ShoulderChatWindowProps {
   assets: AssetDef[]
   pieces: PlacedPiece[]
   mapRadius: number
-  /** Solo or DM — players get a refuse message on place intents. */
+  /** Solo or DM — players get a refuse message on place intents / no board tools. */
   canPlaceFromChat: boolean
   onPlaceActions: (actions: ShoulderPlaceAction[]) => void
   onLibraryPatches: (patches: ShoulderLibraryPatch[]) => void
+  onUpdatePiece: (id: string, patch: PieceUpdatePatch) => void
+  onMovePiece: (id: string, q: number, r: number) => void
 }
 
 function newId(): string {
@@ -50,6 +68,8 @@ function occupiedKeys(pieces: PlacedPiece[], layer: 'ground' | 'object'): Set<st
   return s
 }
 
+type ReachState = 'checking' | 'ok' | 'offline'
+
 export function ShoulderChatWindow({
   pack,
   pieceContext,
@@ -59,6 +79,8 @@ export function ShoulderChatWindow({
   canPlaceFromChat,
   onPlaceActions,
   onLibraryPatches,
+  onUpdatePiece,
+  onMovePiece,
 }: ShoulderChatWindowProps) {
   const listId = useId()
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -66,59 +88,203 @@ export function ShoulderChatWindow({
       id: newId(),
       role: 'system',
       text:
-        'Local Shoulder — rules Q&A from the active pack, plus DM/solo place & arrange from chat (demo-pack fuzzy match). No paid API. Future: optional Ollama URL (not called yet).',
+        'Shoulder — rules Q&A + DM board tools. Prefers local Ollama (via /ollama proxy) with tool calling; falls back to the offline local helper when Ollama is off or unreachable.',
     },
   ])
   const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
   const [ollamaUrl, setOllamaUrl] = useState(() => loadShoulderOllamaUrl())
+  const [ollamaModel, setOllamaModel] = useState(() => loadShoulderOllamaModel())
+  const [ollamaEnabled, setOllamaEnabled] = useState<boolean>(() => {
+    const saved = loadShoulderOllamaEnabled()
+    return saved === null ? true : saved
+  })
+  const [reach, setReach] = useState<ReachState>('checking')
+  const [models, setModels] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
+
+  // Live board refs so tool rounds see placements from earlier tools in the same turn
+  const assetsRef = useRef(assets)
+  const piecesRef = useRef(pieces)
+  const mapRadiusRef = useRef(mapRadius)
+  useEffect(() => {
+    assetsRef.current = assets
+    piecesRef.current = pieces
+    mapRadiusRef.current = mapRadius
+  }, [assets, pieces, mapRadius])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [messages])
+  }, [messages, busy])
+
+  const probe = useCallback(async (base: string) => {
+    setReach('checking')
+    const result = await probeOllamaTags(base)
+    if (result.ok) {
+      setReach('ok')
+      setModels(result.models)
+      // Auto-enable when never explicitly disabled and tags reachable
+      if (loadShoulderOllamaEnabled() === null) {
+        setOllamaEnabled(true)
+      }
+    } else {
+      setReach('offline')
+      setModels([])
+    }
+    return result
+  }, [])
+
+  useEffect(() => {
+    const base = ollamaUrl.trim() || DEFAULT_OLLAMA_BASE
+    const ac = new AbortController()
+    void probe(base)
+    return () => ac.abort()
+  }, [ollamaUrl, probe])
 
   const packLabel = pack?.title?.trim() || null
   const envUrl = envShoulderUrl()
+  const useOllama = ollamaEnabled && reach === 'ok'
 
-  const send = useCallback(() => {
-    const q = draft.trim()
-    if (!q) return
-    setDraft('')
-    const userMsg: ChatMessage = { id: newId(), role: 'user', text: q }
+  const bannerLabel = useOllama
+    ? `Ollama · ${ollamaModel || DEFAULT_OLLAMA_MODEL}`
+    : reach === 'checking' && ollamaEnabled
+      ? 'Checking Ollama…'
+      : 'Local helper (Ollama offline)'
 
-    let assistantText: string
-
-    if (isPlaceIntent(q)) {
-      if (!canPlaceFromChat) {
-        assistantText = playerRefusePlaceMessage()
-      } else {
+  const runLocalFallback = useCallback(
+    (q: string): string => {
+      if (isPlaceIntent(q)) {
+        if (!canPlaceFromChat) {
+          return playerRefusePlaceMessage()
+        }
         const objOcc = occupiedKeys(pieces, 'object')
         const gndOcc = occupiedKeys(pieces, 'ground')
-        // Also treat any piece cell as soft-occupied for object stacking avoidance
         for (const p of pieces) {
           if (layerForCategory(p.category ?? 'props') !== 'ground') {
             objOcc.add(cellKey(p.q, p.r))
           }
         }
         const planned = planPlaceFromChat(q, assets, mapRadius, objOcc, gndOcc)
-        assistantText = planned.text
-        if (planned.actions.length) {
-          onPlaceActions(planned.actions)
-        }
-        if (planned.libraryPatches.length) {
-          onLibraryPatches(planned.libraryPatches)
-        }
+        if (planned.actions.length) onPlaceActions(planned.actions)
+        if (planned.libraryPatches.length) onLibraryPatches(planned.libraryPatches)
+        return planned.text
       }
-    } else {
       const answer = answerFromRulesPack(
         q,
         pack?.body ?? '',
         pack?.title ?? '',
         pieceContext,
       )
-      assistantText = answer.text
+      return answer.text
+    },
+    [
+      canPlaceFromChat,
+      pieces,
+      assets,
+      mapRadius,
+      onPlaceActions,
+      onLibraryPatches,
+      pack,
+      pieceContext,
+    ],
+  )
+
+  const send = useCallback(async () => {
+    const q = draft.trim()
+    if (!q || busy) return
+    setDraft('')
+    const userMsg: ChatMessage = { id: newId(), role: 'user', text: q }
+    setMessages((prev) => [...prev, userMsg])
+    setBusy(true)
+
+    abortRef.current?.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
+
+    let assistantText: string
+
+    if (useOllama) {
+      try {
+        const history = messages
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            text: m.text,
+          }))
+
+        const toolCtx: ShoulderToolContext = {
+          get assets() {
+            return assetsRef.current
+          },
+          get pieces() {
+            return piecesRef.current
+          },
+          get mapRadius() {
+            return mapRadiusRef.current
+          },
+          canPlace: canPlaceFromChat,
+          onPlaceActions: (actions) => {
+            onPlaceActions(actions)
+            // Optimistic local mirror so later tool rounds in this turn see them
+            piecesRef.current = [
+              ...piecesRef.current,
+              ...actions.map((a, i) => {
+                const asset = assetsRef.current.find((x) => x.id === a.assetId)
+                return {
+                  id: `tmp-${Date.now()}-${i}`,
+                  assetId: a.assetId,
+                  q: a.q,
+                  r: a.r,
+                  layer: layerForCategory(asset?.category ?? 'props'),
+                  category: asset?.category,
+                } satisfies PlacedPiece
+              }),
+            ]
+          },
+          onLibraryPatches,
+          onUpdatePiece,
+          onMovePiece: (id, qq, rr) => {
+            onMovePiece(id, qq, rr)
+            piecesRef.current = piecesRef.current.map((p) =>
+              p.id === id ? { ...p, q: qq, r: rr } : p,
+            )
+          },
+        }
+
+        const result = await runShoulderOllamaChat({
+          baseUrl: ollamaUrl.trim() || DEFAULT_OLLAMA_BASE,
+          model: ollamaModel.trim() || DEFAULT_OLLAMA_MODEL,
+          userText: q,
+          history,
+          pack,
+          pieceContext,
+          assets: assetsRef.current,
+          pieces: piecesRef.current,
+          mapRadius: mapRadiusRef.current,
+          canPlace: canPlaceFromChat,
+          toolCtx,
+          signal: ac.signal,
+        })
+        assistantText = result.text
+        if (result.usedTools.length) {
+          assistantText += `\n\n_Tools: ${result.usedTools.join(' → ')}_`
+        }
+      } catch (err) {
+        if (ac.signal.aborted) {
+          setBusy(false)
+          return
+        }
+        const message = err instanceof Error ? err.message : String(err)
+        assistantText =
+          `Ollama error (${message}). Falling back to local helper.\n\n` +
+          runLocalFallback(q)
+        setReach('offline')
+      }
+    } else {
+      assistantText = runLocalFallback(q)
     }
 
     const assistantMsg: ChatMessage = {
@@ -126,35 +292,48 @@ export function ShoulderChatWindow({
       role: 'assistant',
       text: assistantText,
     }
-    setMessages((prev) => [...prev, userMsg, assistantMsg])
+    setMessages((prev) => [...prev, assistantMsg])
+    setBusy(false)
   }, [
     draft,
-    pack,
-    pieceContext,
+    busy,
+    useOllama,
+    messages,
     canPlaceFromChat,
-    pieces,
-    assets,
-    mapRadius,
     onPlaceActions,
     onLibraryPatches,
+    onUpdatePiece,
+    onMovePiece,
+    ollamaUrl,
+    ollamaModel,
+    pack,
+    pieceContext,
+    runLocalFallback,
   ])
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      send()
+      void send()
     }
   }
 
   const onSaveSettings = () => {
-    saveShoulderOllamaUrl(ollamaUrl)
+    const url = ollamaUrl.trim() || DEFAULT_OLLAMA_BASE
+    const model = ollamaModel.trim() || DEFAULT_OLLAMA_MODEL
+    setOllamaUrl(url)
+    setOllamaModel(model)
+    saveShoulderOllamaUrl(url)
+    saveShoulderOllamaModel(model)
+    saveShoulderOllamaEnabled(ollamaEnabled)
     setSettingsOpen(false)
+    void probe(url)
   }
 
   return (
     <div className="shoulder-chat">
       <div className="shoulder-banner" role="status">
-        <strong>Local Shoulder</strong>
+        <strong>{bannerLabel}</strong>
         <span>
           {packLabel
             ? ` · rules: ${packLabel}`
@@ -183,13 +362,25 @@ export function ShoulderChatWindow({
                 ? 'You'
                 : m.role === 'system'
                   ? 'Note'
-                  : 'Helper'}
+                  : useOllama
+                    ? 'Shoulder'
+                    : 'Helper'}
             </span>
             <div className="shoulder-msg-body">
               <MessageBody text={m.text} />
             </div>
           </div>
         ))}
+        {busy ? (
+          <div className="shoulder-msg shoulder-msg-system">
+            <span className="shoulder-msg-role">Note</span>
+            <div className="shoulder-msg-body">
+              <p className="shoulder-p">
+                {useOllama ? 'Talking to Ollama…' : 'Thinking…'}
+              </p>
+            </div>
+          </div>
+        ) : null}
         <div ref={bottomRef} />
       </div>
 
@@ -201,11 +392,14 @@ export function ShoulderChatWindow({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
+          disabled={busy}
           placeholder={
             canPlaceFromChat
               ? pack
-                ? 'Ask rules, or “put a fae well and 3 imps around it”…'
-                : 'Place: “camp with 5 imps” — or load a rules pack for Q&A…'
+                ? useOllama
+                  ? 'Ask rules, or “make a small camp and put 5 goblins around it”…'
+                  : 'Ask rules, or “put a fae well and 3 imps around it”…'
+                : 'Place: “camp with 5 goblins” — or load a rules pack for Q&A…'
               : pack
                 ? 'Ask about Fighter, Rogue, Guard, HP…'
                 : 'Load a rules pack, then ask…'
@@ -217,8 +411,8 @@ export function ShoulderChatWindow({
           <button
             type="button"
             className="shoulder-send"
-            onClick={send}
-            disabled={!draft.trim()}
+            onClick={() => void send()}
+            disabled={!draft.trim() || busy}
           >
             Ask
           </button>
@@ -236,32 +430,73 @@ export function ShoulderChatWindow({
       {settingsOpen && (
         <div className="shoulder-settings" aria-label="Shoulder settings">
           <p className="shoulder-settings-note">
-            Bite 2 uses the <strong>local helper</strong> only (rules Q&A + DM
-            place/arrange). No network. Optional Ollama / OpenAI-compatible URL
-            is stored for a later bite — it is <em>not called</em> yet.
+            Ollama is proxied through the room server (
+            <code>/ollama</code> → <code>:3001</code> →{' '}
+            <code>127.0.0.1:11434</code>) so the browser stays CORS-safe. Run{' '}
+            <code>npm run server</code> + <code>npm run dev</code>. When Ollama
+            is off or unreachable, Shoulder uses the offline local helper.
             {envUrl ? (
               <>
                 {' '}
-                <code>VITE_SHOULDER_URL</code> is set in the build env but unused
-                for now.
+                <code>VITE_SHOULDER_URL</code> can override the default base.
               </>
             ) : null}
           </p>
+          <label className="shoulder-settings-check">
+            <input
+              type="checkbox"
+              checked={ollamaEnabled}
+              onChange={(e) => setOllamaEnabled(e.target.checked)}
+            />{' '}
+            Enable Ollama
+            {reach === 'ok'
+              ? ' (reachable)'
+              : reach === 'checking'
+                ? ' (checking…)'
+                : ' (offline)'}
+          </label>
           <label className="shoulder-settings-label" htmlFor="shoulder-ollama">
-            Future Ollama URL (optional stub)
+            Base URL (proxy)
           </label>
           <input
             id="shoulder-ollama"
-            type="url"
+            type="text"
             className="shoulder-settings-input"
-            placeholder="http://127.0.0.1:11434"
+            placeholder={DEFAULT_OLLAMA_BASE}
             value={ollamaUrl}
             onChange={(e) => setOllamaUrl(e.target.value)}
             autoComplete="off"
           />
+          <label className="shoulder-settings-label" htmlFor="shoulder-model">
+            Model
+          </label>
+          <input
+            id="shoulder-model"
+            type="text"
+            className="shoulder-settings-input"
+            placeholder={DEFAULT_OLLAMA_MODEL}
+            value={ollamaModel}
+            onChange={(e) => setOllamaModel(e.target.value)}
+            list="shoulder-model-list"
+            autoComplete="off"
+          />
+          {models.length > 0 ? (
+            <datalist id="shoulder-model-list">
+              {models.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+          ) : null}
           <div className="shoulder-settings-actions">
             <button type="button" className="shoulder-send" onClick={onSaveSettings}>
               Save locally
+            </button>
+            <button
+              type="button"
+              className="shoulder-settings-toggle"
+              onClick={() => void probe(ollamaUrl.trim() || DEFAULT_OLLAMA_BASE)}
+            >
+              Re-check
             </button>
           </div>
         </div>
@@ -270,7 +505,7 @@ export function ShoulderChatWindow({
   )
 }
 
-/** Lightweight markdown-ish render: **bold**, > quotes, bullets, ---. */
+/** Lightweight markdown-ish render: **bold**, > quotes, bullets, ---, _italic_. */
 function MessageBody({ text }: { text: string }) {
   const blocks = text.split(/\n{2,}/)
   return (
@@ -288,7 +523,9 @@ function MessageBody({ text }: { text: string }) {
           )
         }
         const lines = trimmed.split('\n')
-        const allBullets = lines.every((l) => /^[•*-]\s/.test(l.trim()) || !l.trim())
+        const allBullets = lines.every(
+          (l) => /^[•*-]\s/.test(l.trim()) || !l.trim(),
+        )
         if (allBullets && lines.some((l) => l.trim())) {
           return (
             <ul key={i} className="shoulder-ul">
@@ -317,7 +554,7 @@ function MessageBody({ text }: { text: string }) {
 
 function formatInline(s: string): ReactNode[] {
   const parts: React.ReactNode[] = []
-  const re = /\*\*([^*]+)\*\*|`([^`]+)`/g
+  const re = /\*\*([^*]+)\*\*|`([^`]+)`|_([^_]+)_/g
   let last = 0
   let m: RegExpExecArray | null
   let k = 0
@@ -327,6 +564,8 @@ function formatInline(s: string): ReactNode[] {
       parts.push(<strong key={k++}>{m[1]}</strong>)
     } else if (m[2] != null) {
       parts.push(<code key={k++}>{m[2]}</code>)
+    } else if (m[3] != null) {
+      parts.push(<em key={k++}>{m[3]}</em>)
     }
     last = m.index + m[0].length
   }

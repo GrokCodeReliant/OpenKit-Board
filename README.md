@@ -2,7 +2,7 @@
 
 Digital square checkerboard game board for Open Kit D&D-style PNG assets.
 
-MVP: **Shoulder** is a private floating chat (per browser client) with a **local helper** — extractive rules Q&A over the active pack (e.g. Kit Sparks), plus **DM/solo place & arrange** from natural language against the loaded demo-pack AssetDef list (fuzzy match; no goblin → Imp Skirmisher with a chat note). Players cannot place from Shoulder. No paid API / no Ollama calls. Optional Ollama URL remains a settings stub.
+MVP: **Shoulder** is a private floating chat (per browser client). When **Ollama** is reachable (default model `qwen3-coder:30b`, tools-capable), it answers from the active rules pack and — for DM/solo — calls board tools (`search_assets`, `place_pieces`, etc.) so natural language like “camp and 5 goblins” places real kit assets. The browser talks to `/ollama` → room server → `127.0.0.1:11434` (set `OPENKIT_OLLAMA_URL` to override). If Ollama is off or offline, Shoulder falls back to the extractive local helper + hard-coded place planner. Players get rules Q&A only (no place tools). No paid API.
 
 ## Quick start
 
@@ -33,9 +33,11 @@ No auth, no DB — rooms live in server memory.
 # Terminal A — room server (port 3001)
 npm run server
 
-# Terminal B — Vite client (proxies /ws and /kit → :3001)
+# Terminal B — Vite client (proxies /ws, /kit, /ollama → :3001)
 npm run dev
 ```
+
+Ollama Shoulder needs both processes (same as live kit). Ensure Ollama is running locally with a tools-capable model (default `qwen3-coder:30b`).
 
 Open http://localhost:5173 in two browser tabs:
 
