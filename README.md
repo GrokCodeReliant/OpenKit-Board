@@ -33,7 +33,7 @@ No auth, no DB — rooms live in server memory.
 # Terminal A — room server (port 3001)
 npm run server
 
-# Terminal B — Vite client (proxies /ws → :3001)
+# Terminal B — Vite client (proxies /ws and /kit → :3001)
 npm run dev
 ```
 
@@ -113,7 +113,7 @@ the title bar; multiple sheets can be open at once.
 - **Rules pack:** Paste/upload .txt/.md/.pdf + rights checkbox (private folio; no required license field); PDF → text client-side; solo localStorage; DM syncs room pack to players (read-only)
 - **Piece sheet / pin library:** Select piece → index-card notes + freeform stats; pin by assetId in localStorage; **Pinned** floating window list/edit/place (local only, no WS)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
-- **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story)
+- **Assets:** live Open Kit `passed/` via room server (`OPENKIT_KIT_PATH`), else curated demo pack (~18) under `public/assets/demo/`
 - **Shoulder:** tray button → floating local helper (rules Q&A + DM/solo “put a fae well and 3 imps around it” place/arrange; optional selected piece notes; piece-library stats when DM names HP ranges)
 - Square checkerboard grid (`q`,`r` = column/row) with pan + scroll zoom (top-down); zoom-out fits the whole map
 - **Assets** floating window: categories (Tiles | Props | Tokens | Monsters), theme/level filters, name search, thumbnail palette
@@ -131,16 +131,34 @@ The loader reads `public/assets/manifest.json` (tags: themes + level bands).
 Included demo pack (~18): fae grove tiles/props/tokens; heaven goldvein + lantern + acolyte;
 hell magma/grate + altar + imp/legionnaire; extraplanar dream mist/door/dreamwalker.
 
-## Pointing at a real Open Kit passed/ folder
+## Open Kit live assets (auto-load)
 
-1. Copy (or symlink) your Open Kit passed PNGs into public/assets/passed/,
-   or serve that folder and update the manifest basePath.
-2. Edit public/assets/manifest.json: set basePath (e.g. /assets/passed),
-   list each file with id, name, category, and file.
-   Categories follow prefixes (tile- to tiles, etc.).
-3. Restart the dev server (or rebuild).
+The room server can **scan your Open Kit `passed/` folder** and serve PNGs live —
+new Ink drops show up after **Refresh** in the Assets window (no hand-edited mega-manifest,
+and the ~963 binaries are **not** committed to git).
 
-See categoryFromFilename() in src/assets.ts for prefix rules.
+Default kit path (Windows):
+
+`G:\Game Dev Studio\projects\OpenKit\2d\dnd\passed`
+
+Override with env `OPENKIT_KIT_PATH` if yours differs.
+
+```bash
+# Terminal A — room server (also serves /kit/manifest + /kit/files/*)
+# Optional: setx OPENKIT_KIT_PATH "D:\path\to\passed"
+npm run server
+
+# Terminal B — Vite (proxies /kit → :3001)
+npm run dev
+```
+
+- With server + kit path: Assets shows **Open Kit live (N)** (~963 including goblins).
+- Without server/kit: Assets falls back to the curated **Demo pack** under `public/assets/`.
+- Soft **Refresh** in the Assets tray re-fetches the manifest (picks up new PNGs).
+
+Endpoints: `GET /kit/manifest`, `GET /kit/files/:file` (path-safe). Categories follow
+filename prefixes (`tile-` / `prop-` / `token-` / `monster-`); theme tags are heuristic
+from name keywords (fae, hell, heaven, dream/void, else fantasy).
 
 
 ## Grid coordinates
