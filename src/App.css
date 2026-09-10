@@ -280,8 +280,8 @@
   background: radial-gradient(ellipse at center, #1c2028 0%, #080a0d 78%);
   align-items: stretch;
   justify-content: stretch;
-  /* Ultra-thin top chrome strip; modest L/R; large bottom band for floating folios */
-  padding: 2px 28px 210px;
+  /* Small top inset so board clears browser bookmark/chrome; modest L/R; large bottom band for floating folios */
+  padding: 20px 28px 210px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -1159,7 +1159,7 @@
     border-radius: 14px 14px 0 0;
   }
   .main {
-    padding: 2px 10px 120px;
+    padding: 20px 10px 120px;
   }
   .presence-toggle {
     top: auto;
