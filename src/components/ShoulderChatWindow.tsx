@@ -124,6 +124,8 @@ export function ShoulderChatWindow({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const settingsRef = useRef<HTMLDivElement>(null)
+  const xaiKeyRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   // Live board refs so tool rounds see placements from earlier tools in the same turn
@@ -139,6 +141,18 @@ export function ShoulderChatWindow({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [messages, busy])
+
+  // Keep settings / xAI key field visible when opening settings or switching to Grok
+  useEffect(() => {
+    if (!settingsOpen) return
+    // Defer so expanded xAI fields are in the DOM before scrolling
+    const id = window.requestAnimationFrame(() => {
+      const target =
+        provider === 'xai' ? xaiKeyRef.current ?? settingsRef.current : settingsRef.current
+      target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [settingsOpen, provider])
 
   const probe = useCallback(async (base: string) => {
     setReach('checking')
@@ -473,7 +487,7 @@ export function ShoulderChatWindow({
   }
 
   return (
-    <div className="shoulder-chat">
+    <div className={`shoulder-chat${settingsOpen ? ' settings-open' : ''}`}>
       <div
         className="shoulder-banner"
         role="status"
@@ -589,32 +603,31 @@ export function ShoulderChatWindow({
       </div>
 
       {settingsOpen && (
-        <div className="shoulder-settings" aria-label="Shoulder settings">
+        <div
+          ref={settingsRef}
+          className="shoulder-settings"
+          aria-label="Shoulder settings"
+        >
           <p className="shoulder-settings-note">
-            Provider: <strong>Ollama</strong> (local, free) or <strong>Grok (xAI)</strong>{' '}
-            (paid, fast). Grok calls go browser → <code>/xai</code> → Vite → room server{' '}
-            <code>:3001</code> → <code>api.x.ai</code>. Paste an API key here (stored in{' '}
-            <code>localStorage</code> only — never committed) <em>or</em> set{' '}
-            <code>XAI_API_KEY</code> / <code>GROK_API_KEY</code> on the server before{' '}
-            <code>npm run server</code>. Ollama still uses <code>/ollama</code> →{' '}
-            <code>127.0.0.1:11434</code>. If chat fails, Shoulder shows an error and
-            rules-only Q&A — it does <em>not</em> hard-code place assets.
+            <strong>Ollama</strong> (local) or <strong>Grok</strong> (xAI). Grok key stays in{' '}
+            <code>localStorage</code> — or set <code>XAI_API_KEY</code> on the server. Ollama
+            proxies to <code>127.0.0.1:11434</code>.
             {provider === 'xai' && xaiProbeError ? (
               <>
                 {' '}
-                Last Grok probe/chat error: <code>{xaiProbeError}</code>.
+                Last Grok error: <code>{xaiProbeError}</code>.
               </>
             ) : null}
             {provider === 'ollama' && probeError ? (
               <>
                 {' '}
-                Last Ollama probe/chat error: <code>{probeError}</code>.
+                Last Ollama error: <code>{probeError}</code>.
               </>
             ) : null}
             {envUrl ? (
               <>
                 {' '}
-                <code>VITE_SHOULDER_URL</code> can override the Ollama default base.
+                <code>VITE_SHOULDER_URL</code> overrides Ollama base.
               </>
             ) : null}
           </p>
@@ -676,6 +689,7 @@ export function ShoulderChatWindow({
                 xAI API key (localStorage only)
               </label>
               <input
+                ref={xaiKeyRef}
                 id="shoulder-xai-key"
                 type="password"
                 className="shoulder-settings-input"
