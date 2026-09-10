@@ -15,6 +15,12 @@ const RIGHTS_LABEL =
 /** Link-only sample — never vendor pack body in the repo. */
 const SAMPLE_HELP_URL = 'https://johnharper.itch.io/lasers-feelings'
 
+const LICENSE_CHIPS = [
+  'CC BY 4.0',
+  'Public domain',
+  'Personal / house rules',
+] as const
+
 interface RulesPackPanelProps {
   pack: RulesPack | null
   importedBy: string
@@ -28,6 +34,29 @@ interface RulesPackPanelProps {
   folioOpen?: boolean
   onAttach: (pack: RulesPack) => void
   onClear: () => void
+}
+
+function saveBlockedReason(opts: {
+  busy: boolean
+  rightsOk: boolean
+  body: string
+  license: string
+}): string | null {
+  const { busy, rightsOk, body, license } = opts
+  if (busy) {
+    // Extract in progress (no body yet). During save the button label is enough.
+    if (!body.trim()) return 'Waiting for PDF text…'
+    return null
+  }
+  if (!body.trim()) return 'Body is empty — paste or upload rules text.'
+  if (body.length > BODY_HARD_LIMIT) {
+    return `Text too long (max ${BODY_HARD_LIMIT.toLocaleString()} characters). Shorten it.`
+  }
+  if (!license.trim()) {
+    return 'Add a license (e.g. CC BY 4.0) — tap a chip below or type one.'
+  }
+  if (!rightsOk) return 'Check the rights affirmation to continue.'
+  return null
 }
 
 export function RulesPackPanel({
@@ -50,6 +79,8 @@ export function RulesPackPanel({
   const [formatHint, setFormatHint] = useState<'text' | 'markdown'>('text')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /** Soft hint after a successful extract when license is still blank. */
+  const [suggestCcBy, setSuggestCcBy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const resetForm = () => {
@@ -61,6 +92,7 @@ export function RulesPackPanel({
     setRightsOk(false)
     setFormatHint('text')
     setError(null)
+    setSuggestCcBy(false)
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -72,11 +104,19 @@ export function RulesPackPanel({
       setBody('')
       setSourceUrl(pack.sourceUrl ?? '')
       setAttribution(pack.attribution ?? '')
+      setSuggestCcBy(false)
     } else {
       resetForm()
     }
     setRightsOk(false)
     setImporting(true)
+  }
+
+  const afterExtractOk = (text: string) => {
+    // Soft-suggest only — never invent a license without a click.
+    if (!license.trim() && text.trim()) {
+      setSuggestCcBy(true)
+    }
   }
 
   const onFile = async (file: File | null) => {
@@ -99,9 +139,18 @@ export function RulesPackPanel({
       try {
         const { extractTextFromPdf } = await import('../pdfTextExtract')
         const text = await extractTextFromPdf(file)
+        if (!text.trim()) {
+          setError(
+            'No extractable text found — this may be a scanned/image-only PDF. Paste the rules or use a text-based PDF / .txt / .md.',
+          )
+          setBody('')
+          if (fileRef.current) fileRef.current.value = ''
+          return
+        }
         setBody(text)
         setFormatHint('text')
         if (!title.trim()) setTitle(titleFromFilename(file.name))
+        afterExtractOk(text)
       } catch (e) {
         const msg =
           e instanceof Error
@@ -124,16 +173,32 @@ export function RulesPackPanel({
       setError(`File too large (max ~${BODY_HARD_LIMIT / 1000} KB).`)
       return
     }
-    const text = await file.text()
-    if (text.length > BODY_HARD_LIMIT) {
+    try {
+      const text = await file.text()
+      if (!text.trim()) {
+        setError('That file has no text. Paste rules or try another file.')
+        setBody('')
+        if (fileRef.current) fileRef.current.value = ''
+        return
+      }
+      if (text.length > BODY_HARD_LIMIT) {
+        setError(
+          `Text too large for table sync (max ${BODY_HARD_LIMIT.toLocaleString()} characters). Shorten it and try again.`,
+        )
+        return
+      }
+      setBody(text)
+      setFormatHint(inferFormat(file.name, text))
+      if (!title.trim()) setTitle(titleFromFilename(file.name))
+      afterExtractOk(text)
+    } catch (e) {
       setError(
-        `Text too large for table sync (max ${BODY_HARD_LIMIT.toLocaleString()} characters). Shorten it and try again.`,
+        e instanceof Error
+          ? e.message
+          : 'Could not read that file.',
       )
-      return
+      if (fileRef.current) fileRef.current.value = ''
     }
-    setBody(text)
-    setFormatHint(inferFormat(file.name, text))
-    if (!title.trim()) setTitle(titleFromFilename(file.name))
   }
 
   const canSave =
@@ -142,6 +207,10 @@ export function RulesPackPanel({
     license.trim().length > 0 &&
     body.length <= BODY_HARD_LIMIT &&
     !busy
+
+  const blockedReason = !canSave
+    ? saveBlockedReason({ busy, rightsOk, body, license })
+    : null
 
   const onSave = async () => {
     if (!canSave || readOnly) return
@@ -160,12 +229,18 @@ export function RulesPackPanel({
       onAttach(packNext)
       setImporting(false)
       resetForm()
+      // Parent opens the floating folio on attach so the book is visible.
+      onOpenFolio?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
   }
+
+  const licensePlaceholder = suggestCcBy
+    ? 'Suggested: CC BY 4.0 — tap a chip or type your own'
+    : 'CC BY 4.0, Public domain, Personal / house rules…'
 
   if (importing && !readOnly) {
     const softWarn = body.length >= BODY_SOFT_LIMIT
@@ -186,16 +261,54 @@ export function RulesPackPanel({
             aria-label="Rules pack title"
           />
         </label>
-        <label className="rules-field">
+        <div className="rules-field">
           <span>License (required)</span>
           <input
             type="text"
             value={license}
-            onChange={(e) => setLicense(e.target.value)}
-            placeholder="CC BY 4.0, Public domain, Personal / house rules…"
+            onChange={(e) => {
+              setLicense(e.target.value)
+              if (e.target.value.trim()) setSuggestCcBy(false)
+            }}
+            placeholder={licensePlaceholder}
             aria-label="License"
           />
-        </label>
+          <div className="rules-license-chips" role="group" aria-label="Quick license">
+            {LICENSE_CHIPS.map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                className={
+                  license.trim() === chip
+                    ? 'rules-chip rules-chip-active'
+                    : 'rules-chip'
+                }
+                onClick={() => {
+                  setLicense(chip)
+                  setSuggestCcBy(false)
+                }}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+          {suggestCcBy && !license.trim() && (
+            <p className="rules-hint">
+              Text loaded. Many indie one-pagers use{' '}
+              <button
+                type="button"
+                className="rules-hint-link"
+                onClick={() => {
+                  setLicense('CC BY 4.0')
+                  setSuggestCcBy(false)
+                }}
+              >
+                CC BY 4.0
+              </button>
+              — tap a chip only if that matches your rights (no silent default).
+            </p>
+          )}
+        </div>
         <label className="rules-field">
           <span>Body — paste or upload .txt / .md / .pdf</span>
           <textarea
@@ -274,13 +387,14 @@ export function RulesPackPanel({
             type="button"
             className="rules-primary"
             disabled={!canSave}
+            aria-describedby={blockedReason ? 'rules-save-blocked' : undefined}
             onClick={() => void onSave()}
           >
             {busy
-              ? 'Saving…'
-              : inRoom
-                ? 'Lay on table'
-                : 'Lay on table'}
+              ? body.trim()
+                ? 'Saving…'
+                : 'Waiting for PDF…'
+              : 'Lay on table'}
           </button>
           <button
             type="button"
@@ -293,6 +407,11 @@ export function RulesPackPanel({
             Cancel
           </button>
         </div>
+        {blockedReason && (
+          <p id="rules-save-blocked" className="rules-blocked" role="status">
+            {blockedReason}
+          </p>
+        )}
       </div>
     )
   }
@@ -356,7 +475,9 @@ export function RulesPackPanel({
       <div className="rules-actions">
         <button
           type="button"
-          className="rules-primary"
+          className={
+            folioOpen ? 'rules-primary' : 'rules-primary rules-open-folio-pulse'
+          }
           onClick={() => onOpenFolio?.()}
         >
           {folioOpen ? 'Folio open' : 'Open folio'}
@@ -382,6 +503,12 @@ export function RulesPackPanel({
           </>
         )}
       </div>
+      {!folioOpen && (
+        <p className="rules-hint">
+          Pack is on the table — click <strong>Open folio</strong> to read it as
+          a book.
+        </p>
+      )}
     </div>
   )
 }

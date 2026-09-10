@@ -1641,6 +1641,79 @@
 }
 
 
+.rules-license-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.rules-chip {
+  appearance: none;
+  border: 1px solid #8a7350;
+  background: #e8dcc4;
+  color: #2a2218;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+.rules-chip:hover {
+  filter: brightness(1.05);
+}
+
+.rules-chip-active {
+  background: #c9a86a;
+  border-color: #6a4528;
+  color: #fff8e8;
+}
+
+.rules-blocked {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #e0c070;
+  line-height: 1.35;
+}
+
+.rules-hint {
+  margin: 0;
+  font-size: 0.7rem;
+  color: #a89a82;
+  line-height: 1.35;
+}
+
+.rules-hint-link {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: #e0c070;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.rules-open-folio-pulse {
+  animation: rules-folio-pulse 1.6s ease-in-out 2;
+}
+
+@keyframes rules-folio-pulse {
+  0%,
+  100% {
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(224, 192, 112, 0.55),
+      0 1px 0 rgba(0, 0, 0, 0.2);
+  }
+}
+
 /* Piece sheet / pin library (local notes) */
 .piece-sheet {
   margin: 0 8px 10px;

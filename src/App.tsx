@@ -467,6 +467,10 @@ function App() {
       if (inRoom && room.role === 'dm') {
         room.setRulesPack(pack)
       }
+      // Land on the readable book after Lay on table (Open folio).
+      setRulesFolioOpen(true)
+      floatZRef.current += 1
+      setRulesFolioZ(floatZRef.current)
     },
     [inRoom, room],
   )
