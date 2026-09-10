@@ -66,12 +66,19 @@ Drive a **hosted** board from [grok.com/connectors](https://grok.com/connectors)
 | Tool | Role |
 |------|------|
 | `search_assets` | Fuzzy kit search (call before place) |
-| `list_board` | Pieces on the active room |
+| `list_board` | Pieces on the active room (includes sheet/HP when set) |
 | `place_pieces` | Place assets (placements / ring helper) + broadcast |
 | `update_pieces` | Scale / rotate / move by id or name |
-| `get_rules` | Excerpt from the room’s rules pack |
+| `upsert_piece_sheet` | Create/update a room-synced piece sheet (name, role, notes, stats, HP/armor) — places a token if needed |
+| `update_combat` | HP / armor / defeated / `deltaHp` on matched pieces |
+| `remove_pieces` | Remove pieces by id or name |
+| `clear_board` | Clear object pieces (or `all` for tiles too) |
+| `roll_dice` | Roll `NdS±K` (e.g. `1d6`, `2d6+1`) — result in tool output for narration |
+| `get_rules` | Excerpt / section from the room’s rules pack (larger, section-aware) |
 | `list_rooms` | Live room codes + peer counts |
 | `set_active_room` | Target a room code for subsequent tools |
+
+Piece sheets for MCP live on the **piece** (room state), not only in the browser library, so Host tabs update live over the WebSocket. Tools stay rules-agnostic: they read whatever `rulesPack` text the room loaded (Kit Sparks sample or your import).
 
 ### Run (token + room server)
 
@@ -127,6 +134,7 @@ Rooms are in-memory and disappear when the last WebSocket client leaves.
 2. Click **Host room** — note the 5-char code; **leave that tab open**.
 3. Tell Grok the room code, or call `set_active_room`, or set `OPENKIT_MCP_ROOM` before `npm run server`.
 4. Ask Grok to `search_assets` for goblins and `place_pieces` — tokens should appear on the open board.
+5. **Mini session:** Load Kit Sparks on the Host tab, then in grok.com paste the AI panel “Kit Sparks mini session” prompt (or ask Grok to `get_rules` → `upsert_piece_sheet` a Fighter PC + 2 goblins → `roll_dice` / `update_combat` for a few rounds). Narration stays in chat; board tools move tokens and sheets.
 
 Smoke test without Grok:
 

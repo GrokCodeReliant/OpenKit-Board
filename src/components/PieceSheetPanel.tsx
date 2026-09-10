@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AssetDef, PieceUpdatePatch, PlacedPiece } from '../types'
-import { isEditUnlocked, pieceTransform } from '../types'
+import { hasPieceSheet, isEditUnlocked, pieceTransform } from '../types'
 import type { PieceLibraryEntry } from '../pieceLibrary'
 
 interface PieceSheetPanelProps {
@@ -48,27 +48,78 @@ export function PieceSheetPanel({
   const [displayName, setDisplayName] = useState(defaultName)
   const [notes, setNotes] = useState('')
   const [statsBlob, setStatsBlob] = useState('')
+  const [sheetRole, setSheetRole] = useState('')
+  const [hp, setHp] = useState('')
+  const [maxHp, setMaxHp] = useState('')
+  const [armor, setArmor] = useState('')
+  const [defeated, setDefeated] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
 
-  // Load fields when opening a different asset (not on every pin save).
+  // Prefer room-synced piece sheet when present; else personal library.
   useEffect(() => {
-    if (libraryEntry && libraryEntry.assetId === assetId) {
+    if (placedPiece && hasPieceSheet(placedPiece)) {
+      setDisplayName(placedPiece.displayName?.trim() || defaultName)
+      setNotes(placedPiece.notes ?? '')
+      setStatsBlob(placedPiece.statsBlob ?? '')
+      setSheetRole(placedPiece.sheetRole ?? '')
+      setHp(placedPiece.hp != null ? String(placedPiece.hp) : '')
+      setMaxHp(placedPiece.maxHp != null ? String(placedPiece.maxHp) : '')
+      setArmor(placedPiece.armor != null ? String(placedPiece.armor) : '')
+      setDefeated(placedPiece.defeated === true)
+    } else if (libraryEntry && libraryEntry.assetId === assetId) {
       setDisplayName(libraryEntry.displayName || defaultName)
       setNotes(libraryEntry.notes)
       setStatsBlob(libraryEntry.statsBlob)
+      setSheetRole('')
+      setHp('')
+      setMaxHp('')
+      setArmor('')
+      setDefeated(false)
     } else {
       setDisplayName(defaultName)
       setNotes('')
       setStatsBlob('')
+      setSheetRole('')
+      setHp('')
+      setMaxHp('')
+      setArmor('')
+      setDefeated(false)
     }
     setSavedFlash(false)
-    // Intentionally only assetId — pin updates libraryEntry and must not wipe the flash.
+    // Switch target: asset, selected piece, or incoming MCP sheet fields.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- switch-target only
-  }, [assetId])
+  }, [
+    assetId,
+    placedPiece?.id,
+    placedPiece?.displayName,
+    placedPiece?.notes,
+    placedPiece?.statsBlob,
+    placedPiece?.sheetRole,
+    placedPiece?.hp,
+    placedPiece?.maxHp,
+    placedPiece?.armor,
+    placedPiece?.defeated,
+  ])
 
   const pinned = Boolean(libraryEntry && libraryEntry.assetId === assetId)
   const t = placedPiece ? pieceTransform(placedPiece) : null
   const transformEnabled = Boolean(placedPiece && canEditTransform && onTransformChange)
+
+  const sheetPatch = (): PieceUpdatePatch => {
+    const patch: PieceUpdatePatch = {
+      displayName: displayName.trim() || defaultName,
+      notes,
+      statsBlob,
+      sheetRole: sheetRole.trim(),
+      defeated,
+    }
+    if (hp.trim() !== '' && Number.isFinite(Number(hp))) patch.hp = Number(hp)
+    if (maxHp.trim() !== '' && Number.isFinite(Number(maxHp)))
+      patch.maxHp = Number(maxHp)
+    if (armor.trim() !== '' && Number.isFinite(Number(armor)))
+      patch.armor = Number(armor)
+    return patch
+  }
 
   const onSave = () => {
     onPin({
@@ -78,6 +129,9 @@ export function PieceSheetPanel({
       statsBlob,
       thumbSrc,
     })
+    if (placedPiece && onTransformChange) {
+      onTransformChange(sheetPatch())
+    }
     setSavedFlash(true)
     window.setTimeout(() => setSavedFlash(false), 1600)
   }
@@ -154,6 +208,69 @@ export function PieceSheetPanel({
           aria-label="Freeform stats"
         />
       </label>
+
+      {placedPiece && (
+        <fieldset className="piece-transform-fields">
+          <legend>Board sheet / combat</legend>
+          <p className="piece-sheet-hint">
+            Synced on this piece over the room (MCP + Host). Rules-agnostic —
+            fill from whatever pack is on the table.
+          </p>
+          <div className="piece-transform-grid">
+            <label className="rules-field">
+              <span>Role</span>
+              <input
+                type="text"
+                value={sheetRole}
+                onChange={(e) => setSheetRole(e.target.value)}
+                placeholder="PC / NPC / Fighter…"
+                aria-label="Sheet role"
+                disabled={!transformEnabled}
+              />
+            </label>
+            <label className="rules-field">
+              <span>HP</span>
+              <input
+                type="number"
+                value={hp}
+                onChange={(e) => setHp(e.target.value)}
+                aria-label="Hit points"
+                disabled={!transformEnabled}
+              />
+            </label>
+            <label className="rules-field">
+              <span>Max HP</span>
+              <input
+                type="number"
+                value={maxHp}
+                onChange={(e) => setMaxHp(e.target.value)}
+                aria-label="Max hit points"
+                disabled={!transformEnabled}
+              />
+            </label>
+            <label className="rules-field">
+              <span>Armor</span>
+              <input
+                type="number"
+                value={armor}
+                onChange={(e) => setArmor(e.target.value)}
+                aria-label="Armor"
+                disabled={!transformEnabled}
+              />
+            </label>
+          </div>
+          <label className="piece-lock-check">
+            <input
+              type="checkbox"
+              checked={defeated}
+              disabled={!transformEnabled}
+              onChange={(e) => setDefeated(e.target.checked)}
+              aria-label="Defeated"
+            />
+            <span>Defeated / down</span>
+          </label>
+        </fieldset>
+      )}
 
       {placedPiece && (
         <label className="piece-lock-check piece-edit-unlock">
@@ -298,8 +415,10 @@ export function PieceSheetPanel({
       )}
 
       <p className="piece-sheet-hint">
-        Pin saves to your browser library (keyed by asset). Not shared over the
-        room. Drag the title bar to move this card over the table.
+        Pin saves to your browser library (keyed by asset). When a board piece
+        is selected, Save also writes the sheet/combat fields onto that piece
+        so the room (and Grok MCP) stay in sync. Drag the title bar to move
+        this card over the table.
       </p>
 
       <div className="rules-actions">

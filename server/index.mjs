@@ -52,6 +52,14 @@ const RULES_PACK_HARD_LIMIT = 500_000
  *   offsetY?: number,
  *   lockedToCell?: boolean,
  *   editUnlocked?: boolean,
+ *   displayName?: string,
+ *   notes?: string,
+ *   statsBlob?: string,
+ *   sheetRole?: string,
+ *   hp?: number,
+ *   maxHp?: number,
+ *   armor?: number,
+ *   defeated?: boolean,
  * }} Piece
  */
 
@@ -173,6 +181,42 @@ function canMutatePiece(role, clientId, piece) {
  * @param {Record<string, unknown>} src
  * @returns {Partial<Piece>}
  */
+
+/**
+ * Optional room-synced index card / combat sheet fields (rules-agnostic).
+ * @param {Record<string, unknown>} src
+ * @returns {Partial<Piece>}
+ */
+function pickSheetFields(src) {
+  /** @type {Partial<Piece>} */
+  const out = {}
+  if (typeof src.displayName === 'string') {
+    out.displayName = src.displayName.trim().slice(0, 80)
+  }
+  if (typeof src.notes === 'string') {
+    out.notes = src.notes.slice(0, 4000)
+  }
+  if (typeof src.statsBlob === 'string') {
+    out.statsBlob = src.statsBlob.slice(0, 4000)
+  }
+  if (typeof src.sheetRole === 'string') {
+    out.sheetRole = src.sheetRole.trim().slice(0, 40)
+  }
+  if (typeof src.hp === 'number' && Number.isFinite(src.hp)) {
+    out.hp = Math.min(9999, Math.max(-999, Math.round(src.hp)))
+  }
+  if (typeof src.maxHp === 'number' && Number.isFinite(src.maxHp)) {
+    out.maxHp = Math.min(9999, Math.max(0, Math.round(src.maxHp)))
+  }
+  if (typeof src.armor === 'number' && Number.isFinite(src.armor)) {
+    out.armor = Math.min(99, Math.max(0, Math.round(src.armor)))
+  }
+  if (typeof src.defeated === 'boolean') {
+    out.defeated = src.defeated
+  }
+  return out
+}
+
 function pickTransform(src) {
   /** @type {Partial<Piece>} */
   const out = {}
@@ -1014,7 +1058,7 @@ wss.on('connection', (ws) => {
         })
         return
       }
-      const patch = pickTransform(msg)
+      const patch = { ...pickTransform(msg), ...pickSheetFields(msg) }
       if (Object.keys(patch).length === 0) {
         send(ws, { type: 'error', message: 'Invalid update payload' })
         return

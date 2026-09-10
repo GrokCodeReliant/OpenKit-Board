@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AssetCategory, PlacedPiece } from '../types'
+import type { AssetCategory, PieceUpdatePatch, PlacedPiece } from '../types'
 import type { RulesPack } from '../rulesPack'
 import { BODY_HARD_LIMIT } from '../rulesPack'
 import type { ClientMessage, Role, RoomState, ServerMessage } from './protocol'
@@ -29,18 +29,7 @@ export interface RoomSession {
   setRadius: (radius: number) => void
   place: (assetId: string, q: number, r: number, category: AssetCategory) => void
   move: (id: string, q: number, r: number) => void
-  updatePiece: (
-    id: string,
-    patch: {
-      rotationDeg?: number
-      scaleX?: number
-      scaleY?: number
-      offsetX?: number
-      offsetY?: number
-      lockedToCell?: boolean
-      editUnlocked?: boolean
-    },
-  ) => void
+  updatePiece: (id: string, patch: PieceUpdatePatch) => void
   deletePiece: (id: string) => void
   setRulesPack: (pack: RulesPack | null) => void
 }
@@ -305,18 +294,8 @@ export function useRoom(autoJoin?: { code: string; role: Role } | null): RoomSes
   )
 
   const updatePiece = useCallback(
-    (
-      id: string,
-      patch: {
-        rotationDeg?: number
-        scaleX?: number
-        scaleY?: number
-        offsetX?: number
-        offsetY?: number
-        lockedToCell?: boolean
-        editUnlocked?: boolean
-      },
-    ) => connectAndSend({ type: 'update', id, ...patch }),
+    (id: string, patch: PieceUpdatePatch) =>
+      connectAndSend({ type: 'update', id, ...patch }),
     [connectAndSend],
   )
 
