@@ -162,9 +162,158 @@ function matchPieces(pieces, assets, match) {
   if (byId.length) return byId
   return pieces.filter((p) => {
     if (p.assetId.toLowerCase().includes(m)) return true
+    if (typeof p.displayName === 'string' && p.displayName.toLowerCase().includes(m))
+      return true
+    if (typeof p.sheetRole === 'string' && p.sheetRole.toLowerCase().includes(m))
+      return true
     const a = assets.find((x) => x.id === p.assetId)
     return Boolean(a && a.name.toLowerCase().includes(m))
   })
+}
+
+function clipStr(v, max) {
+  if (typeof v !== 'string') return undefined
+  return v.slice(0, max)
+}
+
+/** Apply rules-agnostic sheet / combat fields onto a piece (mutates). */
+function applySheetFields(piece, args) {
+  if (typeof args.displayName === 'string') {
+    piece.displayName = args.displayName.trim().slice(0, 80)
+  }
+  if (typeof args.notes === 'string') {
+    piece.notes = args.notes.slice(0, 4000)
+  }
+  if (typeof args.statsBlob === 'string') {
+    piece.statsBlob = args.statsBlob.slice(0, 4000)
+  }
+  if (typeof args.sheetRole === 'string') {
+    piece.sheetRole = args.sheetRole.trim().slice(0, 40)
+  }
+  if (typeof args.hp === 'number' && Number.isFinite(args.hp)) {
+    piece.hp = Math.min(9999, Math.max(-999, Math.round(args.hp)))
+  }
+  if (typeof args.maxHp === 'number' && Number.isFinite(args.maxHp)) {
+    piece.maxHp = Math.min(9999, Math.max(0, Math.round(args.maxHp)))
+  }
+  if (typeof args.armor === 'number' && Number.isFinite(args.armor)) {
+    piece.armor = Math.min(99, Math.max(0, Math.round(args.armor)))
+  }
+  if (typeof args.defeated === 'boolean') {
+    piece.defeated = args.defeated
+  }
+}
+
+function sheetSummary(p) {
+  const out = {}
+  if (p.displayName) out.displayName = p.displayName
+  if (p.sheetRole) out.sheetRole = p.sheetRole
+  if (p.hp != null) out.hp = p.hp
+  if (p.maxHp != null) out.maxHp = p.maxHp
+  if (p.armor != null) out.armor = p.armor
+  if (p.defeated === true) out.defeated = true
+  if (typeof p.notes === 'string' && p.notes.trim()) {
+    out.notesPreview = p.notes.trim().slice(0, 120)
+  }
+  if (typeof p.statsBlob === 'string' && p.statsBlob.trim()) {
+    out.statsPreview = p.statsBlob.trim().slice(0, 120)
+  }
+  return out
+}
+
+/** Parse NdS±K dice, e.g. 1d6, 2d6+1, d6, 3d8-2 */
+function rollDiceExpression(expr) {
+  const raw = String(expr || '').trim().toLowerCase().replace(/\s+/g, '')
+  const m = raw.match(/^(\d*)d(\d+)([+-]\d+)?$/)
+  if (!m) {
+    return { ok: false, error: 'Bad expression — use NdS±K like 1d6, 2d6+1, d6' }
+  }
+  const n = m[1] ? Number(m[1]) : 1
+  const sides = Number(m[2])
+  const mod = m[3] ? Number(m[3]) : 0
+  if (!Number.isFinite(n) || n < 1 || n > 40) {
+    return { ok: false, error: 'Die count must be 1–40' }
+  }
+  if (!Number.isFinite(sides) || sides < 2 || sides > 1000) {
+    return { ok: false, error: 'Sides must be 2–1000' }
+  }
+  const rolls = []
+  for (let i = 0; i < n; i++) {
+    rolls.push(1 + Math.floor(Math.random() * sides))
+  }
+  const sum = rolls.reduce((a, b) => a + b, 0)
+  const total = sum + mod
+  const detail =
+    mod === 0
+      ? `${n}d${sides} → [${rolls.join(', ')}] = ${total}`
+      : `${n}d${sides}${mod >= 0 ? '+' : ''}${mod} → [${rolls.join(', ')}] ${mod >= 0 ? '+' : ''}${mod} = ${total}`
+  return {
+    ok: true,
+    expression: raw,
+    n,
+    sides,
+    modifier: mod,
+    rolls,
+    total,
+    detail,
+  }
+}
+
+function findRulesExcerpt(body, query, maxChars) {
+  const cap = Math.min(4000, Math.max(200, Math.round(maxChars) || 1800))
+  if (!query) {
+    return { found: true, excerpt: body.slice(0, cap), mode: 'head' }
+  }
+  const q = query.toLowerCase().trim()
+  // Prefer markdown section whose header contains the query
+  const lines = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  let sectionStart = -1
+  let sectionEnd = body.length
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const hm = line.match(/^#{1,3}\s+(.*)$/)
+    if (!hm) continue
+    if (hm[1].toLowerCase().includes(q) || q.split(/\s+/).some((t) => t.length >= 3 && hm[1].toLowerCase().includes(t))) {
+      // compute byte/char offsets
+      let start = 0
+      for (let j = 0; j < i; j++) start += lines[j].length + 1
+      sectionStart = start
+      for (let k = i + 1; k < lines.length; k++) {
+        if (/^#{1,3}\s+/.test(lines[k])) {
+          let end = 0
+          for (let j = 0; j < k; j++) end += lines[j].length + 1
+          sectionEnd = end
+          break
+        }
+      }
+      break
+    }
+  }
+  if (sectionStart >= 0) {
+    return {
+      found: true,
+      excerpt: body.slice(sectionStart, Math.min(sectionEnd, sectionStart + cap)),
+      mode: 'section',
+    }
+  }
+  const lower = body.toLowerCase()
+  let idx = lower.indexOf(q)
+  if (idx < 0) {
+    const tokens = q.split(/\s+/).filter((t) => t.length >= 3)
+    let best = -1
+    for (const t of tokens) {
+      const i = lower.indexOf(t)
+      if (i >= 0 && (best < 0 || i < best)) best = i
+    }
+    idx = best
+  }
+  if (idx < 0) return { found: false }
+  const start = Math.max(0, idx - 160)
+  return {
+    found: true,
+    excerpt: body.slice(start, start + cap),
+    mode: 'match',
+  }
 }
 
 function textResult(obj) {
@@ -346,7 +495,7 @@ function buildMcpServer(ctx) {
     'list_board',
     {
       description:
-        'Summarize pieces currently on the active MCP room board (id, asset, name, q, r, scale, rotation).',
+        'Summarize pieces on the active MCP room board, including sheet/combat fields (HP, armor, displayName) when set.',
       inputSchema: z.object({}),
     },
     async () => {
@@ -367,6 +516,7 @@ function buildMcpServer(ctx) {
           rotationDeg: p.rotationDeg ?? 0,
           editUnlocked: p.editUnlocked === true,
           layer: p.layer,
+          ...sheetSummary(p),
         }
       })
       return textResult({
@@ -374,6 +524,7 @@ function buildMcpServer(ctx) {
         mapRadius: room.mapRadius,
         pieceCount: list.length,
         pieces: list,
+        note: 'Sheet/combat fields (hp, armor, displayName, …) appear when set via upsert_piece_sheet / update_combat.',
       })
     },
   )
@@ -618,12 +769,16 @@ function buildMcpServer(ctx) {
     'get_rules',
     {
       description:
-        'Search the active room’s rules pack for an excerpt matching a query.',
+        'Read the active room’s rules pack. Optional query finds a markdown section or excerpt (Fighter, Rogue, HP, Armor, …). Rules-agnostic — returns whatever pack the room loaded.',
       inputSchema: z.object({
         query: z
           .string()
           .optional()
-          .describe('Topic to look up in the rules pack'),
+          .describe('Topic or section title to look up'),
+        maxChars: z
+          .number()
+          .optional()
+          .describe('Excerpt length (default 1800, cap 4000)'),
       }),
     },
     async (rawArgs) => {
@@ -631,7 +786,8 @@ function buildMcpServer(ctx) {
       if (target.error) return textResult(target)
       const { room, roomCode } = target
       const args = coerceToolArgs(rawArgs)
-      const query = String(args.query ?? '').toLowerCase().trim()
+      const query = String(args.query ?? '').trim()
+      const maxChars = Number(args.maxChars ?? 1800)
       const pack = room.rulesPack
       const body = pack?.body || ''
       const title = pack?.title || ''
@@ -642,45 +798,322 @@ function buildMcpServer(ctx) {
             'No rules pack loaded in this room. DM: Load Kit Sparks sample (or import) while Hosting.',
         })
       }
-      if (!query) {
+      const hit = findRulesExcerpt(body, query, maxChars)
+      if (!hit.found) {
         return textResult({
           roomCode,
           title,
-          excerpt: body.slice(0, 800),
+          found: false,
+          hint: 'No match — try Fighter, Rogue, Guard, HP, Armor, Damage',
         })
       }
-      const lower = body.toLowerCase()
-      const idx = lower.indexOf(query)
-      if (idx < 0) {
-        const tokens = query.split(/\s+/).filter((t) => t.length >= 3)
-        let best = -1
-        for (const t of tokens) {
-          const i = lower.indexOf(t)
-          if (i >= 0 && (best < 0 || i < best)) best = i
-        }
-        if (best < 0) {
-          return textResult({
-            roomCode,
-            title,
-            found: false,
-            hint: 'No match — try Fighter, Rogue, Guard, HP, Armor',
-          })
-        }
-        const start = Math.max(0, best - 120)
-        return textResult({
-          roomCode,
-          title,
-          found: true,
-          excerpt: body.slice(start, start + 700),
-        })
-      }
-      const start = Math.max(0, idx - 120)
       return textResult({
         roomCode,
         title,
         found: true,
-        excerpt: body.slice(start, start + 700),
+        mode: hit.mode,
+        query: query || null,
+        excerpt: hit.excerpt,
+        packChars: body.length,
       })
+    },
+  )
+
+  server.registerTool(
+    'upsert_piece_sheet',
+    {
+      description:
+        'Create or update a room-synced piece sheet (displayName, role, notes, stats, HP/armor). Match an existing piece by id/name, or place a new token with assetId/name + q/r then attach the sheet. Broadcasts so Host boards update live.',
+      inputSchema: z.object({
+        match: z
+          .string()
+          .optional()
+          .describe('Existing piece id or display/asset name fragment'),
+        assetId: z.string().optional(),
+        name: z.string().optional().describe('Asset name if placing a new token'),
+        q: z.number().optional(),
+        r: z.number().optional(),
+        x: z.number().optional(),
+        y: z.number().optional(),
+        displayName: z.string().optional(),
+        sheetRole: z
+          .string()
+          .optional()
+          .describe('Freeform role tag: PC, NPC, Fighter, Rogue, …'),
+        notes: z.string().optional(),
+        statsBlob: z
+          .string()
+          .optional()
+          .describe('Freeform stats text from the room rules pack'),
+        hp: z.number().optional(),
+        maxHp: z.number().optional(),
+        armor: z.number().optional(),
+        defeated: z.boolean().optional(),
+      }),
+    },
+    async (rawArgs) => {
+      const target = resolveTargetRoom(ctx)
+      if (target.error) return textResult(target)
+      const { room, roomCode } = target
+      const args = coerceToolArgs(rawArgs)
+      const assets = ctx.getAssets()
+      const match = String(args.match ?? '')
+      let piece = null
+      let created = false
+
+      if (match.trim()) {
+        const hits = matchPieces(room.pieces, assets, match)
+        if (!hits.length) {
+          return textResult({
+            ok: false,
+            roomCode,
+            error: `No pieces matched "${match}"`,
+          })
+        }
+        piece = hits[0]
+      } else {
+        const idHint =
+          args.assetId != null && String(args.assetId).trim()
+            ? String(args.assetId)
+            : undefined
+        const nameHint =
+          args.name != null && String(args.name).trim()
+            ? String(args.name)
+            : undefined
+        const q = Number(args.q ?? args.x)
+        const r = Number(args.r ?? args.y)
+        const asset = resolveAsset(assets, idHint, nameHint)
+        if (!asset || !Number.isFinite(q) || !Number.isFinite(r)) {
+          return textResult({
+            ok: false,
+            roomCode,
+            error:
+              'Provide match for an existing piece, or assetId/name + q,r to place a new token with a sheet.',
+          })
+        }
+        if (!inSquareMap(q, r, room.mapRadius)) {
+          return textResult({
+            ok: false,
+            roomCode,
+            error: 'q,r outside the board',
+          })
+        }
+        const layer = asset.category === 'tiles' ? 'ground' : 'object'
+        room.pieces = room.pieces.filter(
+          (p) => !(p.q === q && p.r === r && p.layer === layer),
+        )
+        piece = {
+          id: ctx.nextPieceId(),
+          assetId: asset.id,
+          q,
+          r,
+          layer,
+          ownerId: 'mcp',
+          category: asset.category,
+          rotationDeg: 0,
+          scaleX: 1,
+          scaleY: 1,
+          offsetX: 0,
+          offsetY: 0,
+          lockedToCell: true,
+          editUnlocked: false,
+        }
+        room.pieces.push(piece)
+        created = true
+      }
+
+      applySheetFields(piece, args)
+      if (!piece.displayName && (args.name || args.displayName)) {
+        // already handled by applySheetFields when displayName set
+      }
+      if (!piece.displayName) {
+        const a = assets.find((x) => x.id === piece.assetId)
+        if (typeof args.displayName !== 'string' && a) {
+          // leave unset — list_board falls back to asset name
+        }
+      }
+
+      ctx.broadcast(room, { type: 'state', state: ctx.roomState(room) })
+      const a = assets.find((x) => x.id === piece.assetId)
+      return textResult({
+        ok: true,
+        roomCode,
+        created,
+        piece: {
+          id: piece.id,
+          assetId: piece.assetId,
+          name: a?.name ?? piece.assetId,
+          q: piece.q,
+          r: piece.r,
+          ...sheetSummary(piece),
+        },
+      })
+    },
+  )
+
+  server.registerTool(
+    'update_combat',
+    {
+      description:
+        'Update combat fields on matched pieces: hp / maxHp / armor / defeated, or deltaHp (negative = damage). Auto-marks defeated when hp ≤ 0 unless defeated is set explicitly. Broadcasts live.',
+      inputSchema: z.object({
+        match: z
+          .string()
+          .describe('Piece id or display/asset name fragment'),
+        hp: z.number().optional(),
+        maxHp: z.number().optional(),
+        armor: z.number().optional(),
+        defeated: z.boolean().optional(),
+        deltaHp: z
+          .number()
+          .optional()
+          .describe('Add to current hp (use negative for damage)'),
+      }),
+    },
+    async (rawArgs) => {
+      const target = resolveTargetRoom(ctx)
+      if (target.error) return textResult(target)
+      const { room, roomCode } = target
+      const args = coerceToolArgs(rawArgs)
+      const assets = ctx.getAssets()
+      const match = String(args.match ?? '')
+      const targets = matchPieces(room.pieces, assets, match)
+      if (!targets.length) {
+        return textResult({
+          ok: false,
+          updated: 0,
+          roomCode,
+          error: `No pieces matched "${match}"`,
+        })
+      }
+      const updated = []
+      for (const p of targets) {
+        if (typeof args.maxHp === 'number' && Number.isFinite(args.maxHp)) {
+          p.maxHp = Math.min(9999, Math.max(0, Math.round(args.maxHp)))
+        }
+        if (typeof args.armor === 'number' && Number.isFinite(args.armor)) {
+          p.armor = Math.min(99, Math.max(0, Math.round(args.armor)))
+        }
+        if (typeof args.hp === 'number' && Number.isFinite(args.hp)) {
+          p.hp = Math.min(9999, Math.max(-999, Math.round(args.hp)))
+        }
+        if (typeof args.deltaHp === 'number' && Number.isFinite(args.deltaHp)) {
+          const cur = typeof p.hp === 'number' && Number.isFinite(p.hp) ? p.hp : 0
+          p.hp = Math.min(9999, Math.max(-999, Math.round(cur + args.deltaHp)))
+        }
+        if (typeof args.defeated === 'boolean') {
+          p.defeated = args.defeated
+        } else if (typeof p.hp === 'number' && p.hp <= 0) {
+          p.defeated = true
+        }
+        const a = assets.find((x) => x.id === p.assetId)
+        updated.push({
+          id: p.id,
+          name: p.displayName || a?.name || p.assetId,
+          hp: p.hp,
+          maxHp: p.maxHp,
+          armor: p.armor,
+          defeated: p.defeated === true,
+        })
+      }
+      ctx.broadcast(room, { type: 'state', state: ctx.roomState(room) })
+      return textResult({
+        ok: true,
+        roomCode,
+        updated: updated.length,
+        pieces: updated,
+      })
+    },
+  )
+
+  server.registerTool(
+    'remove_pieces',
+    {
+      description:
+        'Remove pieces from the active room by id or name fragment. Broadcasts live.',
+      inputSchema: z.object({
+        match: z
+          .string()
+          .describe('Piece id or display/asset name fragment'),
+      }),
+    },
+    async (rawArgs) => {
+      const target = resolveTargetRoom(ctx)
+      if (target.error) return textResult(target)
+      const { room, roomCode } = target
+      const args = coerceToolArgs(rawArgs)
+      const assets = ctx.getAssets()
+      const match = String(args.match ?? '')
+      const targets = matchPieces(room.pieces, assets, match)
+      if (!targets.length) {
+        return textResult({
+          ok: false,
+          removed: 0,
+          roomCode,
+          error: `No pieces matched "${match}"`,
+        })
+      }
+      const ids = new Set(targets.map((p) => p.id))
+      room.pieces = room.pieces.filter((p) => !ids.has(p.id))
+      ctx.broadcast(room, { type: 'state', state: ctx.roomState(room) })
+      return textResult({
+        ok: true,
+        roomCode,
+        removed: targets.length,
+        ids: [...ids],
+      })
+    },
+  )
+
+  server.registerTool(
+    'clear_board',
+    {
+      description:
+        'Clear pieces on the active room. Default removes object-layer pieces (tokens/monsters/props); pass all=true to also clear ground tiles. Broadcasts live.',
+      inputSchema: z.object({
+        all: z
+          .boolean()
+          .optional()
+          .describe('If true, remove every piece including ground tiles'),
+      }),
+    },
+    async (rawArgs) => {
+      const target = resolveTargetRoom(ctx)
+      if (target.error) return textResult(target)
+      const { room, roomCode } = target
+      const args = coerceToolArgs(rawArgs)
+      const clearAll = args.all === true
+      const before = room.pieces.length
+      room.pieces = clearAll
+        ? []
+        : room.pieces.filter((p) => p.layer === 'ground')
+      const removed = before - room.pieces.length
+      ctx.broadcast(room, { type: 'state', state: ctx.roomState(room) })
+      return textResult({
+        ok: true,
+        roomCode,
+        removed,
+        remaining: room.pieces.length,
+        cleared: clearAll ? 'all' : 'objects',
+      })
+    },
+  )
+
+  server.registerTool(
+    'roll_dice',
+    {
+      description:
+        'Roll dice for the narrative (NdS±K like 1d6, 2d6+1). Returns rolls + total in the tool result — Grok narrates; does not change the board.',
+      inputSchema: z.object({
+        expression: z
+          .string()
+          .describe('Dice expression, e.g. 1d6, 2d6+1, d6'),
+      }),
+    },
+    async (rawArgs) => {
+      const args = coerceToolArgs(rawArgs)
+      const result = rollDiceExpression(String(args.expression ?? ''))
+      return textResult(result)
     },
   )
 

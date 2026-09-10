@@ -88,6 +88,8 @@ export function AiPanel({
   const placeCamp =
     'Using my asset board connector, search assets for camp, then place a camp on the board.'
   const listRooms = 'Using my asset board connector, list rooms on the board.'
+  const miniSession = `Set active room to ${codePlaceholder}. Confirm Kit Sparks is loaded (get_rules query Fighter). Make a Fighter PC sheet + token and 2 goblins with HP/armor from the rules (upsert_piece_sheet), place them, then run 3 rounds of Kit Sparks combat using get_rules, roll_dice, update_combat, and list_board. Narrate the story in chat; use board tools for tokens and sheets.`
+  const miniCombat = `Using my board connector on room ${codePlaceholder}: list_board, then fight one goblin — roll_dice 1d6 for the Fighter Strike, update_combat with damage after Armor, mark defeated at 0 HP.`
 
   return (
     <div className="ai-panel">
@@ -225,6 +227,8 @@ export function AiPanel({
             text={placeGoblins}
           />
           <CopyRow label="Search + place a camp" text={placeCamp} />
+          <CopyRow label="Kit Sparks mini session" text={miniSession} />
+          <CopyRow label="One combat round" text={miniCombat} />
         </div>
       ) : null}
     </div>

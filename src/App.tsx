@@ -47,6 +47,7 @@ import {
   shouldPlayEstablishingShot,
 } from './establishingShot'
 import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PieceUpdatePatch, PlacedPiece } from './types'
+import { hasPieceSheet } from './types'
 import { DEFAULT_PIECE_TRANSFORM, layerForCategory } from './types'
 import './App.css'
 
@@ -481,17 +482,36 @@ function App() {
       : activeRulesPack
   const rulesReadOnly = inRoom && room.role !== 'dm'
 
-  // Optional Shoulder context: notes from selected board piece's library entry.
+  // Optional Shoulder context: prefer room-synced piece sheet, else library.
   const shoulderPieceContext: ShoulderPieceContext | null = (() => {
     if (!selectedPieceId) return null
     const piece = pieces.find((p) => p.id === selectedPieceId)
     if (!piece) return null
     const entry = getLibraryEntry(pieceLibrary, piece.assetId)
     const asset = assetsById.get(piece.assetId)
+    const fromPiece = hasPieceSheet(piece)
     const displayName =
-      entry?.displayName || asset?.name || piece.assetId
-    const notes = entry?.notes?.trim() || ''
-    const statsBlob = entry?.statsBlob?.trim() || ''
+      (fromPiece && piece.displayName?.trim()) ||
+      entry?.displayName ||
+      asset?.name ||
+      piece.assetId
+    const notes = fromPiece
+      ? piece.notes?.trim() || ''
+      : entry?.notes?.trim() || ''
+    const statsParts = fromPiece
+      ? [
+          piece.sheetRole ? `Role: ${piece.sheetRole}` : '',
+          piece.hp != null
+            ? `HP: ${piece.hp}${piece.maxHp != null ? '/' + piece.maxHp : ''}`
+            : '',
+          piece.armor != null ? `Armor: ${piece.armor}` : '',
+          piece.defeated ? 'Defeated' : '',
+          piece.statsBlob?.trim() || '',
+        ].filter(Boolean)
+      : []
+    const statsBlob = fromPiece
+      ? statsParts.join('\n')
+      : entry?.statsBlob?.trim() || ''
     if (!notes && !statsBlob) {
       return { displayName, notes: '', statsBlob: '' }
     }
@@ -733,8 +753,6 @@ function App() {
           {openSheetIds.map((assetId, i) => {
             const entry = getLibraryEntry(pieceLibrary, assetId)
             const asset = assetsById.get(assetId) ?? null
-            const title =
-              entry?.displayName || asset?.name || 'Index card'
             const selectedPlaced =
               selectedPieceId
                 ? (pieces.find(
@@ -742,6 +760,11 @@ function App() {
                       p.id === selectedPieceId && p.assetId === assetId,
                   ) ?? null)
                 : null
+            const title =
+              selectedPlaced?.displayName ||
+              entry?.displayName ||
+              asset?.name ||
+              'Index card'
             const canEdit =
               !!selectedPlaced &&
               canControlPiece(

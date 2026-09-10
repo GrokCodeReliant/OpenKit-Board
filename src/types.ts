@@ -96,11 +96,43 @@ export interface PlacedPiece {
    * Default false — body drag moves the piece cell-to-cell like a tabletop token.
    */
   editUnlocked?: boolean
+  /** Room-synced index card / combat sheet (rules-agnostic freeform). */
+  displayName?: string
+  notes?: string
+  statsBlob?: string
+  /** Freeform role tag, e.g. PC, NPC, Fighter, Rogue. */
+  sheetRole?: string
+  hp?: number
+  maxHp?: number
+  armor?: number
+  defeated?: boolean
 }
 
-/** Patch for updatePiece / WS `update` (transform + edit gate). */
+/** Patch for updatePiece / WS `update` (transform + sheet + edit gate). */
 export type PieceUpdatePatch = Partial<PieceTransform> & {
   editUnlocked?: boolean
+  displayName?: string
+  notes?: string
+  statsBlob?: string
+  sheetRole?: string
+  hp?: number
+  maxHp?: number
+  armor?: number
+  defeated?: boolean
+}
+
+/** True if the piece carries any room-synced sheet / combat fields. */
+export function hasPieceSheet(p: PlacedPiece): boolean {
+  return Boolean(
+    (p.displayName && p.displayName.trim()) ||
+      (p.notes && p.notes.trim()) ||
+      (p.statsBlob && p.statsBlob.trim()) ||
+      (p.sheetRole && p.sheetRole.trim()) ||
+      p.hp != null ||
+      p.maxHp != null ||
+      p.armor != null ||
+      p.defeated === true,
+  )
 }
 
 /** Resolve transform with sensible defaults for older pieces. */

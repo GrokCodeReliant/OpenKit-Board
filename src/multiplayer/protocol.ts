@@ -35,6 +35,14 @@ export type ClientMessage =
       offsetY?: number
       lockedToCell?: boolean
       editUnlocked?: boolean
+      displayName?: string
+      notes?: string
+      statsBlob?: string
+      sheetRole?: string
+      hp?: number
+      maxHp?: number
+      armor?: number
+      defeated?: boolean
     }
   | { type: 'delete'; id: string }
   | { type: 'setRulesPack'; pack: RulesPack | null }
