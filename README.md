@@ -57,6 +57,77 @@ already in a room, the client reconnects quietly.
 
 Optional: set `VITE_WS_URL` (e.g. `ws://localhost:3001`) to bypass the Vite proxy.
 
+## Grok custom MCP connector (board tools)
+
+Drive a **hosted** board from [grok.com/connectors](https://grok.com/connectors) (Custom) over **Streamable HTTP MCP** — no per-token xAI key inside the board for this path. Tools mutate the same in-memory room the WebSocket clients use and **broadcast** so an open Host/Join browser updates live.
+
+### Tools
+
+| Tool | Role |
+|------|------|
+| `search_assets` | Fuzzy kit search (call before place) |
+| `list_board` | Pieces on the active room |
+| `place_pieces` | Place assets (placements / ring helper) + broadcast |
+| `update_pieces` | Scale / rotate / move by id or name |
+| `get_rules` | Excerpt from the room’s rules pack |
+| `list_rooms` | Live room codes + peer counts |
+| `set_active_room` | Target a room code for subsequent tools |
+
+### Run (token + room server)
+
+```bash
+# Generate a secret once and keep it out of git
+export OPENKIT_MCP_TOKEN="$(openssl rand -base64 32)"
+# Optional default room (or use set_active_room after Host)
+# export OPENKIT_MCP_ROOM=ABC12
+# Point at your Open Kit passed/ folder if needed
+# export OPENKIT_KIT_PATH="/path/to/OpenKit/2d/dnd/passed"
+
+npm run server
+```
+
+If `OPENKIT_MCP_TOKEN` is unset, the server **mints one for this process** and prints `export OPENKIT_MCP_TOKEN='…'` once — copy it for the connector. Never commit tokens.
+
+MCP endpoint: `http://localhost:3001/mcp`  
+Auth: `Authorization: Bearer <OPENKIT_MCP_TOKEN>`
+
+### Tunnel (Cloudflare or ngrok)
+
+Grok’s servers must reach your laptop:
+
+```bash
+cloudflared tunnel --url http://localhost:3001
+# or: ngrok http 3001
+```
+
+Copy the HTTPS URL (e.g. `https://….trycloudflare.com`).
+
+### Add the connector on Grok
+
+1. Open [grok.com/connectors](https://grok.com/connectors) → **New** → **Custom**.
+2. URL: `https://<tunnel-host>/mcp`
+3. Auth: Bearer token = the same `OPENKIT_MCP_TOKEN`.
+4. Save / enable the connector.
+
+### Host a room first (required)
+
+Rooms are in-memory and disappear when the last WebSocket client leaves.
+
+1. Run Vite (`npm run dev`) and open the board.
+2. Click **Host room** — note the 5-char code; **leave that tab open**.
+3. Tell Grok the room code, or call `set_active_room`, or set `OPENKIT_MCP_ROOM` before `npm run server`.
+4. Ask Grok to `search_assets` for goblins and `place_pieces` — tokens should appear on the open board.
+
+Smoke test without Grok:
+
+```bash
+curl -s -X POST http://127.0.0.1:3001/mcp \
+  -H "Authorization: Bearer $OPENKIT_MCP_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
 ## Rules packs (Bite A–C)
 
 Import **your own** rules text for the session — paste or upload `.txt` / `.md` / `.pdf` (PDF text is extracted in the browser; binary PDF is never synced).
