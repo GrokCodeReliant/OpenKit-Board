@@ -46,6 +46,8 @@ import {
 import { probeOllamaTags, runShoulderOllamaChat } from '../shoulderOllama'
 import { probeXaiModels, runShoulderXaiChat } from '../shoulderXai'
 import type { ShoulderToolContext } from '../shoulderTools'
+import { McpTokenCopySection } from './McpTokenCopySection'
+import { KitPathSettingsSection } from './KitPathSettingsSection'
 
 export interface ChatMessage {
   id: string
@@ -755,6 +757,10 @@ export function ShoulderChatWindow({
               ) : null}
             </>
           )}
+
+          <KitPathSettingsSection />
+
+          <McpTokenCopySection />
 
           <div className="shoulder-settings-actions">
             <button type="button" className="shoulder-send" onClick={onSaveSettings}>

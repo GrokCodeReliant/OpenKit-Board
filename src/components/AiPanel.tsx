@@ -7,6 +7,7 @@ import type {
   ShoulderPlaceAction,
 } from '../shoulderPlace'
 import { ShoulderChatWindow } from './ShoulderChatWindow'
+import { McpTokenCopySection } from './McpTokenCopySection'
 
 type AiTab = 'shoulder' | 'setup' | 'prompts'
 
@@ -142,6 +143,14 @@ export function AiPanel({
 
       {tab === 'setup' ? (
         <div className="ai-tab-panel ai-tab-docs" role="tabpanel">
+          <SetupSection title="Open Kit folder">
+            <p className="ai-note">
+              Point the board at <em>your</em> Open Kit <code>passed/</code> folder in{' '}
+              <strong>Shoulder → Settings</strong> (or set <code>OPENKIT_KIT_PATH</code>).
+              Demo pack is the fallback when unset.
+            </p>
+          </SetupSection>
+
           <SetupSection title="Local model (Shoulder)">
             <ol className="ai-steps">
               <li>
@@ -166,11 +175,17 @@ export function AiPanel({
           </SetupSection>
 
           <SetupSection title="Grok connector (grok.com)">
+            <p className="ai-note">
+              Token is stable — copy it from <strong>Shoulder → Settings</strong>{' '}
+              (or below). Paste into Grok only when connecting/approving. Tunnel URL
+              may change separately.
+            </p>
+            <McpTokenCopySection compact />
             <ol className="ai-steps">
               <li>
                 Keep <code>npm run server</code> running. Copy the board MCP
-                token from the server printout or <code>.mcp-token</code>{' '}
-                (never commit it).
+                token from Settings (Show / Copy) — no need to open{' '}
+                <code>.mcp-token</code> in Notepad.
               </li>
               <li>
                 Tunnel the server:{' '}

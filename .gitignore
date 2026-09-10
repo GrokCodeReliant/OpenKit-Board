@@ -29,6 +29,7 @@ dist-ssr
 !.env.example
 
 .mcp-token
+.openkit-kit-path
 
 # Local tooling (portable gh, etc.)
 .tools/
