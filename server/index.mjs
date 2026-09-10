@@ -4,7 +4,8 @@
  * Board is a square checkerboard: piece q,r are column/row; radius N → (2N+1)² cells.
  * Run: npm run server  (default port 3001)
  */
-import { createServer } from 'node:http'
+import { createServer, request as httpRequest } from 'node:http'
+import { request as httpsRequest } from 'node:https'
 import { WebSocketServer } from 'ws'
 import { randomBytes } from 'node:crypto'
 import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs'
@@ -496,8 +497,9 @@ const httpServer = createServer((req, res) => {
     return
   }
 
-  // --- Ollama reverse proxy (CORS-safe for Vite client) ---
-  // Browser calls /ollama/... → this server → OPENKIT_OLLAMA_URL (default 127.0.0.1:11434)
+  // --- Ollama reverse proxy (CORS-safe; production / non-Vite) ---
+  // Dev Vite proxies /ollama → 127.0.0.1:11434 directly; this hop uses node:http
+  // (undici fetch often fails on Windows for :11434 even when tags work in PowerShell).
   const OLLAMA_UPSTREAM = (process.env.OPENKIT_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '')
 
   if (pathname.startsWith('/ollama/')) {
@@ -515,70 +517,110 @@ const httpServer = createServer((req, res) => {
 
     const chunks = []
     req.on('data', (c) => chunks.push(c))
-    req.on('end', async () => {
+    req.on('end', () => {
       const bodyBuf = Buffer.concat(chunks)
-      const target = `${OLLAMA_UPSTREAM}${upstreamPath}${url.search || ''}`
-      /** @type {Record<string, string>} */
-      const headers = { Accept: 'application/json' }
-      if (req.method === 'POST') {
-        headers['Content-Type'] = req.headers['content-type'] || 'application/json'
-      }
-      const fetchOpts = {
-        method: req.method === 'HEAD' ? 'GET' : req.method,
-        headers,
-        body: req.method === 'POST' ? bodyBuf : undefined,
-        signal: AbortSignal.timeout(120_000),
-      }
+      const targetUrl = new URL(`${OLLAMA_UPSTREAM}${upstreamPath}${url.search || ''}`)
+      const target = targetUrl.href
+      const isHttps = targetUrl.protocol === 'https:'
+      const requester = isHttps ? httpsRequest : httpRequest
+      const method = req.method === 'HEAD' ? 'GET' : req.method
 
       /**
        * @param {number} attempt
-       * @returns {Promise<Response>}
        */
-      async function fetchUpstream(attempt) {
-        try {
-          return await fetch(target, fetchOpts)
-        } catch (err) {
+      function proxyOnce(attempt) {
+        /** @type {import('node:http').OutgoingHttpHeaders} */
+        const headers = {
+          Accept: 'application/json',
+          Host: targetUrl.host,
+        }
+        if (req.method === 'POST') {
+          headers['Content-Type'] = req.headers['content-type'] || 'application/json'
+          headers['Content-Length'] = bodyBuf.length
+        }
+
+        const upstreamReq = requester(
+          {
+            protocol: targetUrl.protocol,
+            hostname: targetUrl.hostname,
+            port: targetUrl.port || (isHttps ? 443 : 80),
+            path: `${targetUrl.pathname}${targetUrl.search}`,
+            method,
+            headers,
+            timeout: 120_000,
+          },
+          (upstreamRes) => {
+            const outHeaders = {
+              'Content-Type': upstreamRes.headers['content-type'] || 'application/json',
+              'Cache-Control': 'no-store',
+            }
+            res.writeHead(upstreamRes.statusCode || 502, outHeaders)
+            if (req.method === 'HEAD') {
+              upstreamRes.resume()
+              res.end()
+              return
+            }
+            upstreamRes.pipe(res)
+          },
+        )
+
+        upstreamReq.on('timeout', () => {
+          upstreamReq.destroy(Object.assign(new Error('Ollama upstream timeout'), { code: 'ETIMEDOUT' }))
+        })
+
+        upstreamReq.on('error', (err) => {
           const message = err instanceof Error ? err.message : String(err)
+          const code =
+            err && typeof err === 'object' && 'code' in err
+              ? String(/** @type {{ code?: unknown }} */ (err).code || '')
+              : ''
+          const cause =
+            err && typeof err === 'object' && 'cause' in err
+              ? /** @type {{ cause?: { code?: unknown } }} */ (err).cause
+              : undefined
+          const causeCode =
+            cause && typeof cause === 'object' && cause.code != null
+              ? String(cause.code)
+              : ''
+          const detailParts = [message]
+          if (code) detailParts.push(`code=${code}`)
+          if (causeCode) detailParts.push(`cause.code=${causeCode}`)
+          const detail = detailParts.join(' ')
+
           if (attempt === 0) {
             console.warn(
-              `[openkit-board] ollama proxy fetch failed (retrying once): ${message} → ${target}`,
+              `[openkit-board] ollama proxy request failed (retrying once): ${detail} → ${target}`,
             )
-            await new Promise((r) => setTimeout(r, 400))
-            return fetchUpstream(1)
+            setTimeout(() => proxyOnce(1), 400)
+            return
           }
-          throw err
+
+          console.error(
+            `[openkit-board] ollama proxy upstream unreachable: ${detail} → ${target}`,
+          )
+          if (!res.headersSent) {
+            res.writeHead(502, jsonHeaders)
+            res.end(
+              JSON.stringify({
+                error: 'Ollama upstream unreachable',
+                detail,
+                code: code || undefined,
+                causeCode: causeCode || undefined,
+                upstream: OLLAMA_UPSTREAM,
+                target,
+                hint: 'Start Ollama locally, or set OPENKIT_OLLAMA_URL',
+              }),
+            )
+          }
+        })
+
+        if (req.method === 'POST') {
+          upstreamReq.write(bodyBuf)
         }
+        upstreamReq.end()
       }
 
-      try {
-        const upstream = await fetchUpstream(0)
-        const outHeaders = {
-          'Content-Type': upstream.headers.get('content-type') || 'application/json',
-          'Cache-Control': 'no-store',
-        }
-        const buf = Buffer.from(await upstream.arrayBuffer())
-        res.writeHead(upstream.status, outHeaders)
-        if (req.method === 'HEAD') {
-          res.end()
-          return
-        }
-        res.end(buf)
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        console.error(
-          `[openkit-board] ollama proxy upstream unreachable: ${message} → ${target}`,
-        )
-        res.writeHead(502, jsonHeaders)
-        res.end(
-          JSON.stringify({
-            error: 'Ollama upstream unreachable',
-            detail: message,
-            upstream: OLLAMA_UPSTREAM,
-            target,
-            hint: 'Start Ollama locally, or set OPENKIT_OLLAMA_URL',
-          }),
-        )
-      }
+      proxyOnce(0)
     })
     return
   }

@@ -4,13 +4,13 @@ export const SHOULDER_OLLAMA_URL_KEY = 'okb.shoulder.ollamaUrl.v1'
 export const SHOULDER_OLLAMA_ENABLED_KEY = 'okb.shoulder.ollamaEnabled.v1'
 export const SHOULDER_OLLAMA_MODEL_KEY = 'okb.shoulder.ollamaModel.v1'
 
-/** Default base is the room-server proxy (relative → Vite → :3001 → Ollama). */
+/** Default base is the Vite/dev proxy path (relative → Vite → Ollama; room server also serves /ollama). */
 export const DEFAULT_OLLAMA_BASE = '/ollama'
 export const DEFAULT_OLLAMA_MODEL = 'qwen3-coder:30b'
 
 /**
  * Browser cannot call Ollama on 127.0.0.1/localhost (CORS).
- * Rewrite common loopback absolute bases to the room-server proxy `/ollama`.
+ * Rewrite common loopback absolute bases to the CORS-safe `/ollama` proxy.
  */
 export function normalizeOllamaBaseUrl(url: string): string {
   const t = (url || '').trim().replace(/\/$/, '')
