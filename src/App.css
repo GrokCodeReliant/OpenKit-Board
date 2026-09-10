@@ -1112,6 +1112,19 @@
   margin-top: 2px;
 }
 
+.piece-edit-unlock {
+  margin: 10px 0 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(90, 70, 30, 0.08);
+  border: 1px solid rgba(90, 70, 30, 0.18);
+}
+
+.piece-sheet-hint-inline {
+  font-weight: 400;
+  color: #6a5a40;
+}
+
 .piece-transform-actions {
   margin-top: 6px;
 }

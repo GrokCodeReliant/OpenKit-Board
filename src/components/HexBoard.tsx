@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Role } from '../multiplayer/protocol'
 import { canControlPiece } from '../multiplayer/useRoom'
-import type { AssetDef, HexCoord, PieceTransform, PlacedPiece } from '../types'
-import { pieceTransform } from '../types'
+import type { AssetDef, HexCoord, PieceTransform, PieceUpdatePatch, PlacedPiece } from '../types'
+import { isEditUnlocked, pieceTransform } from '../types'
 import {
   clampBoardZoom,
   DEFAULT_HEX_ZOOM,
@@ -16,7 +16,7 @@ import {
   squareToPixel,
 } from '../hex'
 
-export type PieceTransformPatch = Partial<PieceTransform>
+export type PieceTransformPatch = PieceUpdatePatch
 
 interface HexBoardProps {
   mapRadius: number
@@ -442,6 +442,7 @@ export function HexBoard({
   const onHandlePointerDown = (kind: HandleKind, e: React.PointerEvent) => {
     if (e.button !== 0 || e.altKey) return
     if (!selectedPiece) return
+    if (!isEditUnlocked(selectedPiece)) return
     if (!canControlPiece(role, inRoom, clientId, selectedPiece)) return
     beginTransformDrag(kind, e, selectedPiece)
   }
@@ -467,7 +468,8 @@ export function HexBoard({
 
     // Transform handles on selected controllable piece take priority
     // (also started via interactive handle onPointerDown; this is geometric fallback)
-    if (selectedPiece) {
+    // Only when visual edit is unlocked on the piece card.
+    if (selectedPiece && isEditUnlocked(selectedPiece)) {
       const movable = canControlPiece(role, inRoom, clientId, selectedPiece)
       if (movable) {
         const t = pieceTransform(selectedPiece)
@@ -501,10 +503,11 @@ export function HexBoard({
       onSelectPiece(piece.id)
       const movable = canControlPiece(role, inRoom, clientId, piece)
       const t = pieceTransform(piece)
+      const visualEdit = isEditUnlocked(piece)
       if (movable) {
-        // Locked: body-drag nudges image. Shift+drag (or unlocked) moves cell.
-        // Unlock still keeps transform; cell move is how you re-home the piece.
-        if (t.lockedToCell && !e.shiftKey) {
+        // Default (editUnlocked off): always cell-move on body drag.
+        // Visual edit on + locked: body-drag nudges image. Shift+drag moves cell.
+        if (visualEdit && t.lockedToCell && !e.shiftKey) {
           dragRef.current = {
             mode: 'offset',
             startX: e.clientX,
@@ -764,8 +767,8 @@ export function HexBoard({
             )
           })}
 
-          {/* Edit handles for selected piece */}
-          {selectedPiece && selectedCanEdit && (
+          {/* Edit handles only when visual edit unlocked on the piece card */}
+          {selectedPiece && selectedCanEdit && isEditUnlocked(selectedPiece) && (
             <TransformHandles
               piece={selectedPiece}
               zoom={zoom}
@@ -785,7 +788,7 @@ export function HexBoard({
 
       <div className="board-hud">
         <span>
-          Scroll zoom · empty/Alt drag pan · handles: rotate / scale / lock-nudge
+          Scroll zoom · empty/Alt drag pan · unlock visual edit on card for handles
         </span>
         <span>
           Zoom {Math.round(zoom * 100)}%

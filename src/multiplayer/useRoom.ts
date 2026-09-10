@@ -38,6 +38,7 @@ export interface RoomSession {
       offsetX?: number
       offsetY?: number
       lockedToCell?: boolean
+      editUnlocked?: boolean
     },
   ) => void
   deletePiece: (id: string) => void
@@ -313,6 +314,7 @@ export function useRoom(autoJoin?: { code: string; role: Role } | null): RoomSes
         offsetX?: number
         offsetY?: number
         lockedToCell?: boolean
+        editUnlocked?: boolean
       },
     ) => connectAndSend({ type: 'update', id, ...patch }),
     [connectAndSend],

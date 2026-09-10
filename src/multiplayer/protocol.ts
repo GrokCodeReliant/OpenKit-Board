@@ -34,6 +34,7 @@ export type ClientMessage =
       offsetX?: number
       offsetY?: number
       lockedToCell?: boolean
+      editUnlocked?: boolean
     }
   | { type: 'delete'; id: string }
   | { type: 'setRulesPack'; pack: RulesPack | null }

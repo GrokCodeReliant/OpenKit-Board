@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { AssetDef, PieceTransform, PlacedPiece } from '../types'
-import { pieceTransform } from '../types'
+import type { AssetDef, PieceUpdatePatch, PlacedPiece } from '../types'
+import { isEditUnlocked, pieceTransform } from '../types'
 import type { PieceLibraryEntry } from '../pieceLibrary'
 
 interface PieceSheetPanelProps {
@@ -11,7 +11,7 @@ interface PieceSheetPanelProps {
   /** When the sheet is tied to a selected board piece, expose transforms. */
   placedPiece?: PlacedPiece | null
   canEditTransform?: boolean
-  onTransformChange?: (patch: Partial<PieceTransform>) => void
+  onTransformChange?: (patch: PieceUpdatePatch) => void
   onPin: (entry: {
     assetId: string
     displayName: string
@@ -155,13 +155,40 @@ export function PieceSheetPanel({
         />
       </label>
 
+      {placedPiece && (
+        <label className="piece-lock-check piece-edit-unlock">
+          <input
+            type="checkbox"
+            checked={isEditUnlocked(placedPiece)}
+            disabled={!transformEnabled}
+            onChange={(e) =>
+              onTransformChange?.({ editUnlocked: e.target.checked })
+            }
+            aria-label="Unlock visual edit"
+          />
+          <span>
+            Unlock visual edit
+            <span className="piece-sheet-hint-inline">
+              {' '}
+              — handles for rotate / scale / nudge (off = drag moves cells)
+            </span>
+          </span>
+        </label>
+      )}
+
       {t && (
-        <fieldset className="piece-transform-fields" disabled={!transformEnabled}>
+        <fieldset
+          className="piece-transform-fields"
+          disabled={!transformEnabled || !isEditUnlocked(placedPiece!)}
+        >
           <legend>Board transform</legend>
           <p className="piece-sheet-hint">
             Rotate / scale / nudge so roads and gates abut. Lock keeps the home
             cell; body-drag nudges the image — stretch edges to fill after.
             {!transformEnabled && ' (read-only — you do not control this piece)'}
+            {transformEnabled &&
+              !isEditUnlocked(placedPiece!) &&
+              ' (unlock visual edit above to change)'}
           </p>
           <div className="piece-transform-grid">
             <label className="rules-field">

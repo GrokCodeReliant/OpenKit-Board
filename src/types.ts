@@ -91,6 +91,16 @@ export interface PlacedPiece {
   offsetX?: number
   offsetY?: number
   lockedToCell?: boolean
+  /**
+   * When true, show transform handles and allow visual edit (rotate/scale/offset).
+   * Default false — body drag moves the piece cell-to-cell like a tabletop token.
+   */
+  editUnlocked?: boolean
+}
+
+/** Patch for updatePiece / WS `update` (transform + edit gate). */
+export type PieceUpdatePatch = Partial<PieceTransform> & {
+  editUnlocked?: boolean
 }
 
 /** Resolve transform with sensible defaults for older pieces. */
@@ -103,6 +113,11 @@ export function pieceTransform(p: PlacedPiece): PieceTransform {
     offsetY: Number.isFinite(p.offsetY) ? (p.offsetY as number) : 0,
     lockedToCell: p.lockedToCell !== false,
   }
+}
+
+/** Visual-edit mode is opt-in; omit / false ⇒ simple cell move. */
+export function isEditUnlocked(p: PlacedPiece): boolean {
+  return p.editUnlocked === true
 }
 
 export const CATEGORIES: { id: AssetCategory; label: string }[] = [
