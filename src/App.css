@@ -2222,7 +2222,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .shoulder-chat {
@@ -2257,6 +2257,12 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.shoulder-chat.settings-open .shoulder-messages {
+  flex: 1 1 40%;
+  min-height: 100px;
+  max-height: 45%;
 }
 
 .shoulder-msg {
@@ -2404,6 +2410,8 @@
 
 .shoulder-settings {
   flex: 0 0 auto;
+  max-height: min(280px, 50%);
+  overflow-y: auto;
   padding: 8px 12px 12px;
   border-top: 1px dashed rgba(90, 70, 40, 0.25);
   background: rgba(255, 245, 225, 0.9);
