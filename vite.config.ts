@@ -23,6 +23,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/ollama/, ''),
       },
+      // Shoulder xAI Grok → room server proxy → api.x.ai
+      '/xai': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     },
   },
 })

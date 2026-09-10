@@ -1,4 +1,4 @@
-/** Shoulder Ollama settings — persisted in localStorage. */
+/** Shoulder LLM settings (Ollama + xAI Grok) — persisted in localStorage. */
 
 export const SHOULDER_OLLAMA_URL_KEY = 'okb.shoulder.ollamaUrl.v1'
 export const SHOULDER_OLLAMA_ENABLED_KEY = 'okb.shoulder.ollamaEnabled.v1'
@@ -100,4 +100,72 @@ export function loadShoulderOllamaModel(): string {
 export function saveShoulderOllamaModel(model: string): void {
   const t = model.trim() || DEFAULT_OLLAMA_MODEL
   localStorage.setItem(SHOULDER_OLLAMA_MODEL_KEY, t)
+}
+
+/** Provider: local Ollama or xAI Grok (OpenAI-compatible). */
+export type ShoulderProvider = 'ollama' | 'xai'
+
+export const SHOULDER_PROVIDER_KEY = 'okb.shoulder.provider.v1'
+export const SHOULDER_XAI_MODEL_KEY = 'okb.shoulder.xaiModel.v1'
+export const SHOULDER_XAI_API_KEY = 'okb.shoulder.xaiApiKey.v1'
+
+export const DEFAULT_XAI_MODEL = 'grok-4.6'
+/** Browser → Vite → room server → api.x.ai */
+export const DEFAULT_XAI_BASE = '/xai/v1'
+
+export function loadShoulderProvider(): ShoulderProvider {
+  try {
+    const raw = localStorage.getItem(SHOULDER_PROVIDER_KEY)
+    if (raw === 'xai' || raw === 'ollama') return raw
+  } catch {
+    /* ignore */
+  }
+  return 'ollama'
+}
+
+export function saveShoulderProvider(provider: ShoulderProvider): void {
+  localStorage.setItem(SHOULDER_PROVIDER_KEY, provider)
+}
+
+export function loadShoulderXaiModel(): string {
+  try {
+    const raw = localStorage.getItem(SHOULDER_XAI_MODEL_KEY)
+    const trimmed = typeof raw === 'string' ? raw.trim() : ''
+    if (trimmed) return trimmed
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_XAI_MODEL
+}
+
+export function saveShoulderXaiModel(model: string): void {
+  const t = model.trim() || DEFAULT_XAI_MODEL
+  localStorage.setItem(SHOULDER_XAI_MODEL_KEY, t)
+}
+
+/** API key lives in localStorage only — never commit. Empty if unset. */
+export function loadShoulderXaiApiKey(): string {
+  try {
+    const raw = localStorage.getItem(SHOULDER_XAI_API_KEY)
+    return typeof raw === 'string' ? raw.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
+export function saveShoulderXaiApiKey(key: string): void {
+  const t = key.trim()
+  if (!t) {
+    try {
+      localStorage.removeItem(SHOULDER_XAI_API_KEY)
+    } catch {
+      /* ignore */
+    }
+    return
+  }
+  localStorage.setItem(SHOULDER_XAI_API_KEY, t)
+}
+
+export function hasShoulderXaiApiKey(): boolean {
+  return loadShoulderXaiApiKey().length > 0
 }
