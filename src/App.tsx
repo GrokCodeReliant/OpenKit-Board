@@ -33,6 +33,10 @@ import {
   upsertLibraryEntry,
 } from './pieceLibrary'
 import type { ShoulderPieceContext } from './shoulderLocalHelper'
+import type {
+  ShoulderLibraryPatch,
+  ShoulderPlaceAction,
+} from './shoulderPlace'
 import type { RoomMode } from './roomShell'
 import { loadRoomMode, saveRoomMode } from './roomShell'
 import { BOARD_SCALE, DEFAULT_HEX_ZOOM } from './cameraViews'
@@ -521,7 +525,53 @@ function App() {
     setRoomRulesPack(activeRulesPack)
   }, [inRoom, roomRole, remoteRulesPack, activeRulesPack, setRoomRulesPack])
 
+  const canPlaceFromChat = !inRoom || room.role === 'dm'
+
+  const onShoulderPlaceActions = useCallback(
+    (actions: ShoulderPlaceAction[]) => {
+      for (const a of actions) {
+        placeAsset(a.assetId, a.q, a.r)
+      }
+    },
+    [placeAsset],
+  )
+
+  const onShoulderLibraryPatches = useCallback(
+    (patches: ShoulderLibraryPatch[]) => {
+      setPieceLibrary((prev) => {
+        let next = prev
+        for (const p of patches) {
+          const existing = getLibraryEntry(next, p.assetId)
+          const asset = assetsById.get(p.assetId)
+          next = upsertLibraryEntry(next, {
+            assetId: p.assetId,
+            displayName:
+              p.displayName ||
+              existing?.displayName ||
+              asset?.name ||
+              p.assetId,
+            notes:
+              p.notes !== undefined
+                ? p.notes
+                : (existing?.notes ?? ''),
+            statsBlob:
+              p.statsBlob !== undefined
+                ? p.statsBlob
+                : (existing?.statsBlob ?? ''),
+            thumbSrc:
+              p.thumbSrc ||
+              existing?.thumbSrc ||
+              asset?.src,
+          })
+        }
+        return next
+      })
+    },
+    [assetsById],
+  )
+
   const handleLeave = () => {
+
     room.leave()
     const url = new URL(window.location.href)
     url.searchParams.delete('room')
@@ -822,7 +872,7 @@ function App() {
           {shoulderOpen && (
             <FloatingWindow
               title="Shoulder"
-              ariaLabel="Shoulder local rules helper"
+              ariaLabel="Shoulder local helper"
               className="floating-shoulder"
               initialX={280}
               initialY={56}
@@ -838,6 +888,12 @@ function App() {
               <ShoulderChatWindow
                 pack={displayRulesPack}
                 pieceContext={shoulderPieceContext}
+                assets={assets}
+                pieces={pieces}
+                mapRadius={mapRadius}
+                canPlaceFromChat={canPlaceFromChat}
+                onPlaceActions={onShoulderPlaceActions}
+                onLibraryPatches={onShoulderLibraryPatches}
               />
             </FloatingWindow>
           )}

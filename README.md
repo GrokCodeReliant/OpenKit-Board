@@ -2,7 +2,7 @@
 
 Digital square checkerboard game board for Open Kit D&D-style PNG assets.
 
-MVP: **Shoulder** is a private floating chat (per browser client) with a **local rules helper** — extractive Q&A over the active rules pack (e.g. Kit Sparks). No paid API. Optional Ollama URL is a settings stub only (not called yet). Board placement by AI is a later bite.
+MVP: **Shoulder** is a private floating chat (per browser client) with a **local helper** — extractive rules Q&A over the active pack (e.g. Kit Sparks), plus **DM/solo place & arrange** from natural language against the loaded demo-pack AssetDef list (fuzzy match; no goblin → Imp Skirmisher with a chat note). Players cannot place from Shoulder. No paid API / no Ollama calls. Optional Ollama URL remains a settings stub.
 
 ## Quick start
 
@@ -114,7 +114,7 @@ the title bar; multiple sheets can be open at once.
 - **Piece sheet / pin library:** Select piece → index-card notes + freeform stats; pin by assetId in localStorage; **Pinned** floating window list/edit/place (local only, no WS)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story)
-- **Shoulder:** tray button → floating local rules helper (Kit Sparks / imported pack text; optional selected piece notes)
+- **Shoulder:** tray button → floating local helper (rules Q&A + DM/solo “put a fae well and 3 imps around it” place/arrange; optional selected piece notes; piece-library stats when DM names HP ranges)
 - Square checkerboard grid (`q`,`r` = column/row) with pan + scroll zoom (top-down); zoom-out fits the whole map
 - **Assets** floating window: categories (Tiles | Props | Tokens | Monsters), theme/level filters, name search, thumbnail palette
 - Drag an asset onto a cell, or click an asset then click a cell
