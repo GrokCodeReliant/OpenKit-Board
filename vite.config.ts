@@ -11,6 +11,10 @@ export default defineConfig({
         target: 'http://localhost:3001',
         ws: true,
       },
+      // Open Kit live manifest + PNG files → npm run server
+      '/kit': {
+        target: 'http://localhost:3001',
+      },
     },
   },
 })

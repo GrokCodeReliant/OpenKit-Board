@@ -7,8 +7,8 @@
 import { createServer } from 'node:http'
 import { WebSocketServer } from 'ws'
 import { randomBytes } from 'node:crypto'
-import { existsSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs'
+import { join, dirname, resolve, basename, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -248,15 +248,252 @@ function createRoom() {
   return room
 }
 
+
+const DEFAULT_KIT_PATH =
+  'G:\\Game Dev Studio\\projects\\OpenKit\\2d\\dnd\\passed'
+
+/**
+ * Resolve Open Kit `passed` folder: env, then a few relative fallbacks.
+ * @returns {string | null}
+ */
+function resolveKitPath() {
+  const candidates = [
+    process.env.OPENKIT_KIT_PATH,
+    DEFAULT_KIT_PATH,
+    join(ROOT, 'passed'),
+    join(ROOT, '..', 'OpenKit', '2d', 'dnd', 'passed'),
+    join(ROOT, '..', 'passed'),
+  ].filter(Boolean)
+
+  for (const cand of candidates) {
+    try {
+      const abs = resolve(cand)
+      if (existsSync(abs) && statSync(abs).isDirectory()) return abs
+    } catch {
+      /* skip */
+    }
+  }
+  return null
+}
+
+function categoryFromFilename(filename) {
+  const base = filename.replace(/\.[^.]+$/, '').toLowerCase()
+  if (base.startsWith('tile-')) return 'tiles'
+  if (base.startsWith('prop-')) return 'props'
+  if (base.startsWith('token-')) return 'tokens'
+  if (base.startsWith('monster-')) return 'monsters'
+  return null
+}
+
+function displayNameFromFilename(filename) {
+  const base = filename.replace(/\.[^.]+$/, '')
+  const withoutPrefix = base.replace(/^(tile|prop|token|monster)-/i, '')
+  return withoutPrefix
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+/**
+ * Theme tags from filename keywords; default fantasy.
+ * @param {string} filename
+ * @returns {string[]}
+ */
+function themesFromFilename(filename) {
+  const n = filename.toLowerCase()
+  /** @type {Set<string>} */
+  const themes = new Set()
+  if (n.includes('fae') || n.includes('fairy') || n.includes('fey')) {
+    themes.add('fae')
+  }
+  if (n.includes('hell') || n.includes('infernal')) {
+    themes.add('hell')
+  }
+  if (
+    n.includes('heaven') ||
+    n.includes('seraph') ||
+    n.includes('halo')
+  ) {
+    themes.add('heaven')
+  }
+  if (
+    n.includes('dream') ||
+    n.includes('void') ||
+    n.includes('extraplanar')
+  ) {
+    themes.add('extraplanar')
+  }
+  if (themes.size === 0) themes.add('fantasy')
+  return [...themes]
+}
+
+/**
+ * Scan kit folder for PNGs and build a Manifest-shaped object.
+ * @param {string} kitDir
+ */
+function buildKitManifest(kitDir) {
+  /** @type {string[]} */
+  let files = []
+  try {
+    files = readdirSync(kitDir).filter((f) => /\.png$/i.test(f))
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw new Error(`Cannot read kit path: ${message}`)
+  }
+
+  files.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+
+  const assets = []
+  for (const file of files) {
+    const category = categoryFromFilename(file)
+    if (!category) continue
+    const id = file.replace(/\.[^.]+$/, '')
+    assets.push({
+      id,
+      name: displayNameFromFilename(file),
+      category,
+      file,
+      themes: themesFromFilename(file),
+      // omit levels → client defaults to all bands
+    })
+  }
+
+  return {
+    version: 1,
+    basePath: '/kit/files',
+    note: `Open Kit live scan of ${kitDir} (${assets.length} assets)`,
+    kitPath: kitDir,
+    assets,
+  }
+}
+
+/**
+ * Safe join under kitDir — rejects .. and absolute escapes.
+ * @param {string} kitDir
+ * @param {string} fileParam
+ * @returns {string | null}
+ */
+function safeKitFilePath(kitDir, fileParam) {
+  if (!fileParam || typeof fileParam !== 'string') return null
+  // URL may encode spaces etc.
+  let name
+  try {
+    name = decodeURIComponent(fileParam)
+  } catch {
+    return null
+  }
+  // Only allow a single basename (no subdirs / separators)
+  const base = basename(name)
+  if (base !== name.replace(/\\/g, '/').split('/').pop()) return null
+  if (base.includes('..') || base.includes('\0')) return null
+  if (!/\.png$/i.test(base)) return null
+
+  const kitResolved = resolve(kitDir)
+  const full = resolve(kitDir, base)
+  const prefix = kitResolved.endsWith(sep) ? kitResolved : kitResolved + sep
+  if (full !== kitResolved && !full.startsWith(prefix)) return null
+  if (!existsSync(full) || !statSync(full).isFile()) return null
+  return full
+}
+
 const httpServer = createServer((req, res) => {
-  // Minimal health + optional static serve of dist/ for later deploy
-  if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, rooms: rooms.size }))
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+  const pathname = url.pathname
+
+  // CORS-ish for Vite proxy / same-origin; keep simple
+  const jsonHeaders = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+  }
+
+  if (pathname === '/health') {
+    const kitPath = resolveKitPath()
+    res.writeHead(200, jsonHeaders)
+    res.end(
+      JSON.stringify({
+        ok: true,
+        rooms: rooms.size,
+        kitPath: kitPath,
+        kitAvailable: Boolean(kitPath),
+      }),
+    )
     return
   }
+
+  if (pathname === '/kit/manifest' && (req.method === 'GET' || req.method === 'HEAD')) {
+    const kitPath = resolveKitPath()
+    if (!kitPath) {
+      res.writeHead(503, jsonHeaders)
+      res.end(
+        JSON.stringify({
+          error: 'Open Kit path not found',
+          hint: 'Set OPENKIT_KIT_PATH to your passed/ folder',
+          triedDefault: DEFAULT_KIT_PATH,
+        }),
+      )
+      return
+    }
+    try {
+      const manifest = buildKitManifest(kitPath)
+      res.writeHead(200, jsonHeaders)
+      res.end(JSON.stringify(manifest))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      res.writeHead(500, jsonHeaders)
+      res.end(JSON.stringify({ error: message }))
+    }
+    return
+  }
+
+  // Optional explicit rescan alias (same as GET manifest — rescans every time)
+  if (pathname === '/kit/rescan' && req.method === 'POST') {
+    const kitPath = resolveKitPath()
+    if (!kitPath) {
+      res.writeHead(503, jsonHeaders)
+      res.end(JSON.stringify({ error: 'Open Kit path not found' }))
+      return
+    }
+    try {
+      const manifest = buildKitManifest(kitPath)
+      res.writeHead(200, jsonHeaders)
+      res.end(JSON.stringify({ ok: true, count: manifest.assets.length, kitPath }))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      res.writeHead(500, jsonHeaders)
+      res.end(JSON.stringify({ error: message }))
+    }
+    return
+  }
+
+  const kitFileMatch = pathname.match(/^\/kit\/files\/(.+)$/)
+  if (kitFileMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+    const kitPath = resolveKitPath()
+    if (!kitPath) {
+      res.writeHead(503, { 'Content-Type': 'text/plain' })
+      res.end('Kit path not found')
+      return
+    }
+    const filePath = safeKitFilePath(kitPath, kitFileMatch[1])
+    if (!filePath) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' })
+      res.end('Not found')
+      return
+    }
+    res.writeHead(200, {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=60',
+    })
+    if (req.method === 'HEAD') {
+      res.end()
+      return
+    }
+    createReadStream(filePath).pipe(res)
+    return
+  }
+
   res.writeHead(404)
-  res.end('Open Kit Board room server. Connect via WebSocket.')
+  res.end('Open Kit Board room server. Connect via WebSocket /kit.')
 })
 
 // Cap inbound frames so a huge/garbage rules payload cannot crash the room WS.
@@ -495,8 +732,17 @@ wss.on('connection', (ws) => {
 
 httpServer.listen(PORT, () => {
   const hasDist = existsSync(DIST)
+  const kitPath = resolveKitPath()
   console.log(`[openkit-board] room server on ws://localhost:${PORT}`)
   console.log(`[openkit-board] health http://localhost:${PORT}/health`)
+  console.log(`[openkit-board] kit manifest http://localhost:${PORT}/kit/manifest`)
+  if (kitPath) {
+    console.log(`[openkit-board] Open Kit path: ${kitPath}`)
+  } else {
+    console.log(
+      `[openkit-board] Open Kit path not found — set OPENKIT_KIT_PATH (default: ${DEFAULT_KIT_PATH})`,
+    )
+  }
   if (hasDist) {
     console.log(`[openkit-board] note: dist/ present (static serve not wired in MVP)`)
   }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { loadAssetsFromManifest } from './assets'
+import { loadAssetsPreferKit, type AssetLoadSource } from './assets'
 import { HexBoard } from './components/HexBoard'
 import { RoomPanel } from './components/RoomPanel'
 import { PresenceToggle } from './components/PresenceToggle'
@@ -73,6 +73,8 @@ function parseRoomFromUrl(): { code: string; role: Role } | null {
 function App() {
   const [assets, setAssets] = useState<AssetDef[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [assetSource, setAssetSource] = useState<AssetLoadSource>('demo')
+  const [assetRefreshing, setAssetRefreshing] = useState(false)
   const [category, setCategory] = useState<AssetCategory>('tiles')
   const [theme, setTheme] = useState<AssetTheme | 'all'>('all')
   const [level, setLevel] = useState<LevelBand | 'all'>('all')
@@ -205,13 +207,23 @@ function App() {
     }
   }, [inRoom, room.roomCode, room.role, urlJoin])
 
-  useEffect(() => {
-    loadAssetsFromManifest()
-      .then(setAssets)
+  const refreshAssets = useCallback(() => {
+    setAssetRefreshing(true)
+    loadAssetsPreferKit()
+      .then((result) => {
+        setAssets(result.assets)
+        setAssetSource(result.source)
+        setLoadError(null)
+      })
       .catch((err: unknown) => {
         setLoadError(err instanceof Error ? err.message : String(err))
       })
+      .finally(() => setAssetRefreshing(false))
   }, [])
+
+  useEffect(() => {
+    refreshAssets()
+  }, [refreshAssets])
 
   // Drop pieces outside the map when radius shrinks (solo only; server handles room)
   useEffect(() => {
@@ -814,6 +826,9 @@ function App() {
                 selectedAssetId={selectedAssetId}
                 role={inRoom ? room.role : null}
                 inRoom={inRoom}
+                assetSource={assetSource}
+                assetRefreshing={assetRefreshing}
+                onRefreshAssets={refreshAssets}
                 onCategoryChange={(c) => {
                   if (!canPlaceCategory(room.role, inRoom, c)) return
                   setCategory(c)

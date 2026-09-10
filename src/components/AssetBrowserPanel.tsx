@@ -1,3 +1,4 @@
+import type { AssetLoadSource } from '../assets'
 import type { Role } from '../multiplayer/protocol'
 import { canPlaceCategory } from '../multiplayer/useRoom'
 import type { AssetCategory, AssetDef, AssetTheme, LevelBand } from '../types'
@@ -12,6 +13,10 @@ interface AssetBrowserPanelProps {
   selectedAssetId: string | null
   role: Role | null
   inRoom: boolean
+  /** Live Open Kit scan vs curated demo fallback. */
+  assetSource: AssetLoadSource
+  assetRefreshing?: boolean
+  onRefreshAssets: () => void
   onCategoryChange: (c: AssetCategory) => void
   onThemeChange: (t: AssetTheme | 'all') => void
   onLevelChange: (l: LevelBand | 'all') => void
@@ -30,6 +35,9 @@ export function AssetBrowserPanel({
   selectedAssetId,
   role,
   inRoom,
+  assetSource,
+  assetRefreshing = false,
+  onRefreshAssets,
   onCategoryChange,
   onThemeChange,
   onLevelChange,
@@ -46,8 +54,39 @@ export function AssetBrowserPanel({
     return a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q)
   })
 
+  const sourceLabel =
+    assetSource === 'kit'
+      ? `Open Kit live (${assets.length})`
+      : `Demo pack (fallback) · ${assets.length}`
+
   return (
     <div className="asset-browser-panel">
+      <div className="asset-source-bar">
+        <span
+          className={
+            assetSource === 'kit'
+              ? 'asset-source-label live'
+              : 'asset-source-label fallback'
+          }
+          title={
+            assetSource === 'kit'
+              ? 'Serving PNGs from OPENKIT_KIT_PATH via the room server'
+              : 'Room server / kit path unavailable — curated demo pack'
+          }
+        >
+          {sourceLabel}
+        </span>
+        <button
+          type="button"
+          className="asset-refresh-btn"
+          onClick={onRefreshAssets}
+          disabled={assetRefreshing}
+          title="Re-scan kit (or reload demo) for new Ink drops"
+        >
+          {assetRefreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
+
       <div className="filter-grid">
         <label className="filter-field">
           <span className="paper-label">Theme</span>
