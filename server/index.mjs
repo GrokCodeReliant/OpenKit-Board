@@ -11,6 +11,11 @@ import { randomBytes } from 'node:crypto'
 import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname, resolve, basename, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  checkBearer,
+  createMcpHttpHandler,
+  resolveMcpToken,
+} from './mcp.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
@@ -402,6 +407,30 @@ function safeKitFilePath(kitDir, fileParam) {
   return full
 }
 
+/** @type {string | null} */
+let mcpActiveRoomCode = (process.env.OPENKIT_MCP_ROOM || '').trim().toUpperCase() || null
+
+const mcpTokenInfo = resolveMcpToken()
+const mcpHttpHandler = createMcpHttpHandler({
+  getRooms: () => rooms,
+  getActiveRoomCode: () => mcpActiveRoomCode,
+  setActiveRoomCode: (code) => {
+    mcpActiveRoomCode = code ? String(code).trim().toUpperCase() : null
+  },
+  getAssets: () => {
+    const kitPath = resolveKitPath()
+    if (!kitPath) return []
+    try {
+      return buildKitManifest(kitPath).assets
+    } catch {
+      return []
+    }
+  },
+  broadcast,
+  roomState,
+  nextPieceId: () => `p${nextPieceSeq++}`,
+})
+
 const httpServer = createServer((req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
   const pathname = url.pathname
@@ -410,6 +439,39 @@ const httpServer = createServer((req, res) => {
   const jsonHeaders = {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-store',
+  }
+
+  // --- MCP Streamable HTTP (Grok custom connectors) ---
+  if (pathname === '/mcp' || pathname.startsWith('/mcp/')) {
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept, MCP-Session-Id',
+        'Access-Control-Max-Age': '86400',
+      })
+      res.end()
+      return
+    }
+    const expected = (process.env.OPENKIT_MCP_TOKEN || '').trim()
+    if (!checkBearer(req.headers.authorization, expected)) {
+      res.writeHead(401, {
+        ...jsonHeaders,
+        'WWW-Authenticate': 'Bearer realm="openkit-mcp"',
+        'Access-Control-Allow-Origin': '*',
+      })
+      res.end(
+        JSON.stringify({
+          error: 'Unauthorized',
+          hint: 'Set Authorization: Bearer <OPENKIT_MCP_TOKEN>',
+        }),
+      )
+      return
+    }
+    // CORS for browser-based connector UIs
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    void mcpHttpHandler(req, res)
+    return
   }
 
   if (pathname === '/health') {
@@ -995,6 +1057,16 @@ httpServer.listen(PORT, () => {
   console.log(`[openkit-board] room server on ws://localhost:${PORT}`)
   console.log(`[openkit-board] health http://localhost:${PORT}/health`)
   console.log(`[openkit-board] kit manifest http://localhost:${PORT}/kit/manifest`)
+  console.log(`[openkit-board] MCP Streamable HTTP http://localhost:${PORT}/mcp (Bearer OPENKIT_MCP_TOKEN)`)
+  if (mcpTokenInfo.generated) {
+    console.log(`[openkit-board] OPENKIT_MCP_TOKEN was unset — generated for this process:`)
+    console.log(`[openkit-board]   export OPENKIT_MCP_TOKEN='${mcpTokenInfo.token}'`)
+  } else {
+    console.log(`[openkit-board] OPENKIT_MCP_TOKEN: set (${mcpTokenInfo.token.length} chars)`)
+  }
+  if (mcpActiveRoomCode) {
+    console.log(`[openkit-board] OPENKIT_MCP_ROOM default: ${mcpActiveRoomCode}`)
+  }
   console.log(`[openkit-board] ollama proxy http://localhost:${PORT}/ollama/api/tags → ${process.env.OPENKIT_OLLAMA_URL || 'http://127.0.0.1:11434'}`)
   console.log(`[openkit-board] xai proxy http://localhost:${PORT}/xai/v1/chat/completions → https://api.x.ai/v1 (env key: ${process.env.XAI_API_KEY || process.env.GROK_API_KEY ? 'set' : 'unset'})`)
   if (kitPath) {

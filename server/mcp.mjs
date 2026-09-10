@@ -1,0 +1,697 @@
+/**
+ * Streamable HTTP MCP at /mcp for Grok custom connectors.
+ * Mutates the same in-memory rooms the WebSocket clients use, then broadcasts.
+ *
+ * Auth: Authorization: Bearer <OPENKIT_MCP_TOKEN>
+ * Room: OPENKIT_MCP_ROOM env, or list_rooms / set_active_room tools.
+ */
+import { randomBytes } from 'node:crypto'
+import { createMcpHandler, McpServer } from '@modelcontextprotocol/server'
+import { toNodeHandler } from '@modelcontextprotocol/node'
+import * as z from 'zod/v4'
+
+const MAX_PLACE_PER_CALL = 30
+const MAX_SEARCH_RESULTS = 12
+
+/**
+ * @typedef {{
+ *   getRooms: () => Map<string, import('./index.mjs') extends never ? any : any>,
+ *   getActiveRoomCode: () => string | null,
+ *   setActiveRoomCode: (code: string | null) => void,
+ *   getAssets: () => { id: string, name: string, category: string, file?: string }[],
+ *   broadcast: (room: any, msg: any, except?: any) => void,
+ *   roomState: (room: any) => any,
+ *   nextPieceId: () => string,
+ * }} McpBoardContext
+ */
+
+function inSquareMap(q, r, radius) {
+  return Math.abs(q) <= radius && Math.abs(r) <= radius
+}
+
+function scoreAsset(query, a) {
+  const q = query.toLowerCase().trim()
+  if (!q) return 0
+  const name = a.name.toLowerCase()
+  const id = a.id.toLowerCase()
+  const cat = a.category.toLowerCase()
+  let score = 0
+  if (name === q || id === q) score += 100
+  if (name.includes(q) || id.includes(q)) score += 40
+  const tokens = q.split(/[^a-z0-9]+/).filter((t) => t.length >= 2)
+  for (const t of tokens) {
+    if (name.includes(t)) score += 8
+    if (id.includes(t)) score += 6
+    if (cat.includes(t)) score += 2
+  }
+  const syn = {
+    goblin: ['imp', 'skirmisher'],
+    goblins: ['imp', 'skirmisher'],
+    camp: ['toadstool', 'fairy', 'lantern', 'camp', 'ring'],
+    campsite: ['toadstool', 'fairy', 'lantern'],
+    orc: ['horned', 'legionnaire'],
+    fire: ['lantern', 'altar'],
+  }
+  for (const t of tokens) {
+    const hints = syn[t]
+    if (!hints) continue
+    for (const h of hints) {
+      if (name.includes(h) || id.includes(h)) score += 5
+    }
+  }
+  return score
+}
+
+function searchAssets(assets, query, limit = 8) {
+  const lim = Math.min(MAX_SEARCH_RESULTS, Math.max(1, Math.round(limit) || 8))
+  return assets
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      category: a.category,
+      score: scoreAsset(query, a),
+    }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .slice(0, lim)
+}
+
+function resolveAsset(assets, assetId, name) {
+  if (assetId) {
+    const exact = assets.find((a) => a.id === assetId)
+    if (exact) return exact
+  }
+  const q = (name || assetId || '').trim()
+  if (!q) return null
+  const hits = searchAssets(assets, q, 1)
+  if (!hits.length) return null
+  return assets.find((a) => a.id === hits[0].id) ?? null
+}
+
+function ringCells(centerQ, centerR, count, radius, mapRadius) {
+  const n = Math.min(24, Math.max(1, Math.round(count)))
+  const rad = Math.max(1, Math.round(radius) || 2)
+  const out = []
+  const seen = new Set()
+  for (let i = 0; i < n; i++) {
+    const angle = (2 * Math.PI * i) / n - Math.PI / 2
+    let q = Math.round(centerQ + rad * Math.cos(angle))
+    let r = Math.round(centerR + rad * Math.sin(angle))
+    for (let tries = 0; tries < 12; tries++) {
+      const key = `${q},${r}`
+      if (
+        inSquareMap(q, r, mapRadius) &&
+        !seen.has(key) &&
+        !(q === centerQ && r === centerR)
+      ) {
+        seen.add(key)
+        out.push({ q, r })
+        break
+      }
+      q += tries % 2 === 0 ? 1 : -1
+      r += tries % 3 === 0 ? 1 : 0
+    }
+  }
+  return out
+}
+
+function coerceValue(value) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
+      try {
+        return coerceValue(JSON.parse(trimmed))
+      } catch {
+        return value
+      }
+    }
+    return value
+  }
+  if (Array.isArray(value)) return value.map((item) => coerceValue(item))
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const [k, v] of Object.entries(value)) out[k] = coerceValue(v)
+    return out
+  }
+  return value
+}
+
+function coerceToolArgs(args) {
+  if (!args || typeof args !== 'object') return {}
+  return /** @type {Record<string, unknown>} */ (coerceValue(args))
+}
+
+function placementRows(args) {
+  const raw = args.placements ?? args.pieces
+  if (Array.isArray(raw)) return raw
+  return []
+}
+
+function cellCoord(row, primary, alias) {
+  const v = row[primary] ?? row[alias]
+  return Number(v)
+}
+
+function matchPieces(pieces, assets, match) {
+  const m = match.trim().toLowerCase()
+  if (!m) return []
+  const byId = pieces.filter((p) => p.id.toLowerCase() === m)
+  if (byId.length) return byId
+  return pieces.filter((p) => {
+    if (p.assetId.toLowerCase().includes(m)) return true
+    const a = assets.find((x) => x.id === p.assetId)
+    return Boolean(a && a.name.toLowerCase().includes(m))
+  })
+}
+
+function textResult(obj) {
+  return {
+    content: [{ type: 'text', text: JSON.stringify(obj, null, 0) }],
+  }
+}
+
+/**
+ * Resolve or mint OPENKIT_MCP_TOKEN for this process.
+ * Never logs the full token when it came from env; logs generated tokens once.
+ * @returns {{ token: string, generated: boolean }}
+ */
+export function resolveMcpToken() {
+  const fromEnv = (process.env.OPENKIT_MCP_TOKEN || '').trim()
+  if (fromEnv) return { token: fromEnv, generated: false }
+  const token = randomBytes(24).toString('base64url')
+  process.env.OPENKIT_MCP_TOKEN = token
+  return { token, generated: true }
+}
+
+/**
+ * @param {string | undefined} authHeader
+ * @param {string} expected
+ */
+export function checkBearer(authHeader, expected) {
+  if (!expected) return false
+  if (!authHeader || typeof authHeader !== 'string') return false
+  const m = authHeader.match(/^Bearer\s+(.+)$/i)
+  if (!m) return false
+  const got = m[1].trim()
+  if (got.length !== expected.length) return false
+  // timing-safe-ish compare for equal lengths
+  let diff = 0
+  for (let i = 0; i < expected.length; i++) {
+    diff |= got.charCodeAt(i) ^ expected.charCodeAt(i)
+  }
+  return diff === 0
+}
+
+/**
+ * @param {McpBoardContext} ctx
+ */
+function resolveTargetRoom(ctx) {
+  const rooms = ctx.getRooms()
+  let code = (ctx.getActiveRoomCode() || '').trim().toUpperCase()
+  if (!code) {
+    const env = (process.env.OPENKIT_MCP_ROOM || '').trim().toUpperCase()
+    if (env) code = env
+  }
+  if (!code) {
+    if (rooms.size === 1) {
+      code = [...rooms.keys()][0]
+    }
+  }
+  if (!code) {
+    return {
+      error:
+        'No active MCP room. Host a room in the board, then call set_active_room with that code (or set OPENKIT_MCP_ROOM). Use list_rooms to see live codes.',
+    }
+  }
+  const room = rooms.get(code)
+  if (!room) {
+    return {
+      error: `Room ${code} not found (or empty — keep Host tab open). Host/join that code, then retry.`,
+      roomCode: code,
+    }
+  }
+  return { room, roomCode: code }
+}
+
+/**
+ * @param {McpBoardContext} ctx
+ */
+function buildMcpServer(ctx) {
+  const server = new McpServer({
+    name: 'openkit-board',
+    version: '1.0.0',
+  })
+
+  server.registerTool(
+    'list_rooms',
+    {
+      description:
+        'List live multiplayer room codes on this server (need an open Host/Join browser tab).',
+      inputSchema: z.object({}),
+    },
+    async () => {
+      const rooms = ctx.getRooms()
+      const active = (ctx.getActiveRoomCode() || process.env.OPENKIT_MCP_ROOM || '')
+        .trim()
+        .toUpperCase() || null
+      const list = [...rooms.values()].map((r) => ({
+        code: r.code,
+        peers: r.clients.size,
+        pieceCount: r.pieces.length,
+        mapRadius: r.mapRadius,
+        hasRules: Boolean(r.rulesPack),
+        active: active === r.code,
+      }))
+      return textResult({
+        rooms: list,
+        activeRoom: active,
+        note:
+          list.length === 0
+            ? 'No rooms — open the board and click Host room, leave the tab open.'
+            : 'Call set_active_room with a code before place_pieces (or set OPENKIT_MCP_ROOM).',
+      })
+    },
+  )
+
+  server.registerTool(
+    'set_active_room',
+    {
+      description:
+        'Target a hosted room code for subsequent board tools (place_pieces, list_board, …).',
+      inputSchema: z.object({
+        roomCode: z
+          .string()
+          .describe('5-char room code from Host room / list_rooms'),
+      }),
+    },
+    async ({ roomCode }) => {
+      const code = String(roomCode || '')
+        .trim()
+        .toUpperCase()
+      if (!code) return textResult({ ok: false, error: 'roomCode required' })
+      const room = ctx.getRooms().get(code)
+      if (!room) {
+        return textResult({
+          ok: false,
+          error: `Room ${code} not found — Host that room in the browser and keep it open.`,
+        })
+      }
+      ctx.setActiveRoomCode(code)
+      return textResult({
+        ok: true,
+        activeRoom: code,
+        peers: room.clients.size,
+        pieceCount: room.pieces.length,
+      })
+    },
+  )
+
+  server.registerTool(
+    'search_assets',
+    {
+      description:
+        'Search loaded kit assets by name/id/category. Returns top matches — call this before place_pieces. Never invent asset ids.',
+      inputSchema: z.object({
+        query: z
+          .string()
+          .describe('Search text, e.g. "goblin", "camp", "toadstool", "imp"'),
+        limit: z
+          .number()
+          .optional()
+          .describe(`Max results (default 8, cap ${MAX_SEARCH_RESULTS})`),
+      }),
+    },
+    async (args) => {
+      const a = coerceToolArgs(args)
+      const query = String(a.query ?? '')
+      const limit = Number(a.limit ?? 8)
+      const assets = ctx.getAssets()
+      const hits = searchAssets(assets, query, limit)
+      return textResult({
+        query,
+        count: hits.length,
+        results: hits,
+        note:
+          hits.length === 0
+            ? 'No matches — try a shorter keyword (imp, toadstool, lantern, tile). Set OPENKIT_KIT_PATH if kit is empty.'
+            : 'Use these exact assetId values with place_pieces.',
+      })
+    },
+  )
+
+  server.registerTool(
+    'list_board',
+    {
+      description:
+        'Summarize pieces currently on the active MCP room board (id, asset, name, q, r, scale, rotation).',
+      inputSchema: z.object({}),
+    },
+    async () => {
+      const target = resolveTargetRoom(ctx)
+      if (target.error) return textResult(target)
+      const { room, roomCode } = target
+      const assets = ctx.getAssets()
+      const list = room.pieces.map((p) => {
+        const a = assets.find((x) => x.id === p.assetId)
+        return {
+          id: p.id,
+          assetId: p.assetId,
+          name: a?.name ?? p.assetId,
+          q: p.q,
+          r: p.r,
+          scaleX: p.scaleX ?? 1,
+          scaleY: p.scaleY ?? 1,
+          rotationDeg: p.rotationDeg ?? 0,
+          editUnlocked: p.editUnlocked === true,
+          layer: p.layer,
+        }
+      })
+      return textResult({
+        roomCode,
+        mapRadius: room.mapRadius,
+        pieceCount: list.length,
+        pieces: list,
+      })
+    },
+  )
+
+  server.registerTool(
+    'place_pieces',
+    {
+      description: `Place kit assets on the square board via placements: [{assetId|name,q,r}]. assetId may be a fuzzy name (e.g. goblin). q/r accept x/y aliases. Cap ${MAX_PLACE_PER_CALL} per call. Optional ring helper: assetId + count + centerQ/centerR + ringRadius. Mutates the hosted room and broadcasts so open boards update live.`,
+      inputSchema: z.object({
+        placements: z
+          .array(
+            z.object({
+              assetId: z.string().optional(),
+              name: z.string().optional(),
+              q: z.number().optional(),
+              r: z.number().optional(),
+              x: z.number().optional(),
+              y: z.number().optional(),
+            }),
+          )
+          .optional(),
+        pieces: z
+          .array(
+            z.object({
+              assetId: z.string().optional(),
+              name: z.string().optional(),
+              q: z.number().optional(),
+              r: z.number().optional(),
+              x: z.number().optional(),
+              y: z.number().optional(),
+            }),
+          )
+          .optional(),
+        assetId: z.string().optional(),
+        name: z.string().optional(),
+        count: z.number().optional(),
+        centerQ: z.number().optional(),
+        centerR: z.number().optional(),
+        centerX: z.number().optional(),
+        centerY: z.number().optional(),
+        ringRadius: z.number().optional(),
+      }),
+    },
+    async (rawArgs) => {
+      const target = resolveTargetRoom(ctx)
+      if (target.error) return textResult(target)
+      const { room, roomCode } = target
+      const args = coerceToolArgs(rawArgs)
+      const assets = ctx.getAssets()
+      /** @type {{ assetId: string, assetName: string, q: number, r: number }[]} */
+      const actions = []
+
+      for (const raw of placementRows(args)) {
+        if (!raw || typeof raw !== 'object') continue
+        const row = /** @type {Record<string, unknown>} */ (raw)
+        const idHint =
+          row.assetId != null && String(row.assetId).trim()
+            ? String(row.assetId)
+            : undefined
+        const nameHint =
+          row.name != null && String(row.name).trim()
+            ? String(row.name)
+            : undefined
+        const q = cellCoord(row, 'q', 'x')
+        const r = cellCoord(row, 'r', 'y')
+        const asset = resolveAsset(assets, idHint, nameHint)
+        if (!asset || !Number.isFinite(q) || !Number.isFinite(r)) continue
+        if (!inSquareMap(q, r, room.mapRadius)) continue
+        actions.push({
+          assetId: asset.id,
+          assetName: asset.name,
+          q,
+          r,
+          category: asset.category,
+        })
+        if (actions.length >= MAX_PLACE_PER_CALL) break
+      }
+
+      if (
+        actions.length < MAX_PLACE_PER_CALL &&
+        (args.assetId || args.name) &&
+        args.count
+      ) {
+        const asset = resolveAsset(
+          assets,
+          args.assetId != null ? String(args.assetId) : undefined,
+          args.name != null ? String(args.name) : undefined,
+        )
+        if (asset) {
+          const centerQ = Number(args.centerQ ?? args.centerX ?? 0)
+          const centerR = Number(args.centerR ?? args.centerY ?? 0)
+          const cells = ringCells(
+            centerQ,
+            centerR,
+            Number(args.count),
+            Number(args.ringRadius ?? 2),
+            room.mapRadius,
+          )
+          for (const c of cells) {
+            if (actions.length >= MAX_PLACE_PER_CALL) break
+            actions.push({
+              assetId: asset.id,
+              assetName: asset.name,
+              q: c.q,
+              r: c.r,
+              category: asset.category,
+            })
+          }
+        }
+      }
+
+      if (!actions.length) {
+        return textResult({
+          ok: false,
+          placed: 0,
+          roomCode,
+          error:
+            'No valid placements. Call search_assets first and use exact assetId + in-bounds q,r.',
+        })
+      }
+
+      const placed = []
+      for (const a of actions) {
+        const layer = a.category === 'tiles' ? 'ground' : 'object'
+        room.pieces = room.pieces.filter(
+          (p) => !(p.q === a.q && p.r === a.r && p.layer === layer),
+        )
+        const piece = {
+          id: ctx.nextPieceId(),
+          assetId: a.assetId,
+          q: a.q,
+          r: a.r,
+          layer,
+          ownerId: 'mcp',
+          category: a.category,
+          rotationDeg: 0,
+          scaleX: 1,
+          scaleY: 1,
+          offsetX: 0,
+          offsetY: 0,
+          lockedToCell: true,
+          editUnlocked: false,
+        }
+        room.pieces.push(piece)
+        placed.push({
+          id: piece.id,
+          assetId: a.assetId,
+          name: a.assetName,
+          q: a.q,
+          r: a.r,
+        })
+      }
+      ctx.broadcast(room, { type: 'state', state: ctx.roomState(room) })
+      return textResult({
+        ok: true,
+        roomCode,
+        placed: placed.length,
+        pieces: placed,
+      })
+    },
+  )
+
+  server.registerTool(
+    'update_pieces',
+    {
+      description:
+        'Update placed pieces in the active room by piece id or asset name substring. Patch scale, rotation, position, or unlock visual edit. Broadcasts to open boards.',
+      inputSchema: z.object({
+        match: z
+          .string()
+          .describe('Piece id (e.g. p12) or asset/display name fragment'),
+        scaleX: z.number().optional(),
+        scaleY: z.number().optional(),
+        rotationDeg: z.number().optional(),
+        q: z.number().optional(),
+        r: z.number().optional(),
+        x: z.number().optional(),
+        y: z.number().optional(),
+        editUnlocked: z.boolean().optional(),
+      }),
+    },
+    async (rawArgs) => {
+      const target = resolveTargetRoom(ctx)
+      if (target.error) return textResult(target)
+      const { room, roomCode } = target
+      const args = coerceToolArgs(rawArgs)
+      const assets = ctx.getAssets()
+      const match = String(args.match ?? '')
+      const targets = matchPieces(room.pieces, assets, match)
+      if (!targets.length) {
+        return textResult({
+          ok: false,
+          updated: 0,
+          roomCode,
+          error: `No pieces matched "${match}"`,
+        })
+      }
+      const updated = []
+      for (const p of targets) {
+        if (typeof args.scaleX === 'number' && Number.isFinite(args.scaleX)) {
+          p.scaleX = Math.min(8, Math.max(0.05, args.scaleX))
+        }
+        if (typeof args.scaleY === 'number' && Number.isFinite(args.scaleY)) {
+          p.scaleY = Math.min(8, Math.max(0.05, args.scaleY))
+        }
+        if (
+          typeof args.rotationDeg === 'number' &&
+          Number.isFinite(args.rotationDeg)
+        ) {
+          let deg = ((args.rotationDeg % 360) + 360) % 360
+          if (deg > 180) deg -= 360
+          p.rotationDeg = deg
+        }
+        if (typeof args.editUnlocked === 'boolean') {
+          p.editUnlocked = args.editUnlocked
+        }
+        const qRaw = args.q ?? args.x
+        const rRaw = args.r ?? args.y
+        if (
+          typeof qRaw === 'number' &&
+          Number.isFinite(qRaw) &&
+          typeof rRaw === 'number' &&
+          Number.isFinite(rRaw) &&
+          inSquareMap(qRaw, rRaw, room.mapRadius)
+        ) {
+          p.q = qRaw
+          p.r = rRaw
+        }
+        updated.push(p.id)
+      }
+      ctx.broadcast(room, { type: 'state', state: ctx.roomState(room) })
+      return textResult({
+        ok: true,
+        roomCode,
+        updated: updated.length,
+        ids: updated,
+      })
+    },
+  )
+
+  server.registerTool(
+    'get_rules',
+    {
+      description:
+        'Search the active room’s rules pack for an excerpt matching a query.',
+      inputSchema: z.object({
+        query: z
+          .string()
+          .optional()
+          .describe('Topic to look up in the rules pack'),
+      }),
+    },
+    async (rawArgs) => {
+      const target = resolveTargetRoom(ctx)
+      if (target.error) return textResult(target)
+      const { room, roomCode } = target
+      const args = coerceToolArgs(rawArgs)
+      const query = String(args.query ?? '').toLowerCase().trim()
+      const pack = room.rulesPack
+      const body = pack?.body || ''
+      const title = pack?.title || ''
+      if (!body.trim()) {
+        return textResult({
+          roomCode,
+          error:
+            'No rules pack loaded in this room. DM: Load Kit Sparks sample (or import) while Hosting.',
+        })
+      }
+      if (!query) {
+        return textResult({
+          roomCode,
+          title,
+          excerpt: body.slice(0, 800),
+        })
+      }
+      const lower = body.toLowerCase()
+      const idx = lower.indexOf(query)
+      if (idx < 0) {
+        const tokens = query.split(/\s+/).filter((t) => t.length >= 3)
+        let best = -1
+        for (const t of tokens) {
+          const i = lower.indexOf(t)
+          if (i >= 0 && (best < 0 || i < best)) best = i
+        }
+        if (best < 0) {
+          return textResult({
+            roomCode,
+            title,
+            found: false,
+            hint: 'No match — try Fighter, Rogue, Guard, HP, Armor',
+          })
+        }
+        const start = Math.max(0, best - 120)
+        return textResult({
+          roomCode,
+          title,
+          found: true,
+          excerpt: body.slice(start, start + 700),
+        })
+      }
+      const start = Math.max(0, idx - 120)
+      return textResult({
+        roomCode,
+        title,
+        found: true,
+        excerpt: body.slice(start, start + 700),
+      })
+    },
+  )
+
+  return server
+}
+
+/**
+ * @param {McpBoardContext} ctx
+ * @returns {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void}
+ */
+export function createMcpHttpHandler(ctx) {
+  const handler = createMcpHandler(() => buildMcpServer(ctx))
+  return toNodeHandler(handler)
+}
