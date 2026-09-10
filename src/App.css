@@ -710,11 +710,12 @@
 /* Outer table surface: wood rim + soft drop shadow */
 .table-object {
   position: relative;
-  /* ~2× prior well (1040×720) for large / 4K screens */
+  /* Square frame for square board (was 2080×1440 rect from ~2× bite) */
   width: min(100%, 2080px);
-  height: min(100%, 1440px);
   max-width: 2080px;
-  max-height: 1440px;
+  max-height: min(100%, 2080px);
+  aspect-ratio: 1 / 1;
+  height: auto;
   min-height: 320px;
   display: flex;
   border-radius: 30px;
@@ -1182,9 +1183,11 @@
   .table-object {
     padding: 16px;
     border-radius: 20px;
-    max-height: none;
-    height: 100%;
     width: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: 1 / 1;
+    height: auto;
   }
   .table-well {
     border-radius: 12px;
