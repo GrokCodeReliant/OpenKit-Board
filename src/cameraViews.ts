@@ -34,10 +34,13 @@ export function fitBoardZoom(
   cellSize = CELL_SIZE,
 ): number {
   if (viewW <= 1 || viewH <= 1) return BOARD_ZOOM_MIN_COMFORT
+  // Square map: (2R+1)*CELL_SIZE on both axes — fit to the inscribed square
+  // of the viewport so a square well kisses all four sides (no letterboxing).
   const extent = boardExtent(mapRadius, cellSize)
-  // Pad so outer cell strokes aren't flush against the well edge
-  const pad = 1.06
-  return Math.min(viewW / (extent * pad), viewH / (extent * pad))
+  const view = Math.min(viewW, viewH)
+  // Tiny pad so outer cell strokes aren't clipped by the well edge
+  const pad = 1.02
+  return view / (extent * pad)
 }
 
 /** Dynamic min zoom: always low enough that the whole board can fit. */

@@ -705,15 +705,22 @@
   z-index: 2;
   overflow: hidden;
   padding-top: 0;
+  /* Size the square table against real stage box (not only width) */
+  container-type: size;
+  container-name: table-stage;
 }
 
 /* Outer table surface: wood rim + soft drop shadow */
 .table-object {
   position: relative;
-  /* Square frame for square board (was 2080×1440 rect from ~2× bite) */
-  width: min(100%, 2080px);
-  max-width: 2080px;
-  max-height: min(100%, 2080px);
+  /*
+   * True square playfield frame, ~0.75× prior 2080 cap (→ 1560) so floating
+   * folios keep dead space. Size with min(cqw, cqh) so an explicit width cannot
+   * outrun max-height and letterbox the square grid on wide stages.
+   */
+  width: min(100cqw, 100cqh, 1560px);
+  max-width: min(100cqw, 1560px);
+  max-height: min(100cqh, 1560px);
   aspect-ratio: 1 / 1;
   height: auto;
   min-height: 320px;
@@ -917,6 +924,8 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
+  /* Equal rim padding keeps this square when .table-object is square */
+  aspect-ratio: 1 / 1;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -1183,7 +1192,7 @@
   .table-object {
     padding: 16px;
     border-radius: 20px;
-    width: 100%;
+    width: min(100cqw, 100cqh, 100%);
     max-width: 100%;
     max-height: 100%;
     aspect-ratio: 1 / 1;
@@ -1191,6 +1200,7 @@
   }
   .table-well {
     border-radius: 12px;
+    aspect-ratio: 1 / 1;
   }
 }
 
