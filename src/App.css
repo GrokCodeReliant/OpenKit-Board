@@ -2146,3 +2146,240 @@
 .rules-folio-floating a {
   color: #6a4528;
 }
+
+/* Shoulder — private local rules helper chat */
+.tray-browse {
+  flex-wrap: wrap;
+}
+
+.tray-browse-btn {
+  flex: 1 1 calc(33% - 6px);
+  min-width: 4.5rem;
+}
+
+.floating-shoulder .floating-window-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.shoulder-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  max-height: 560px;
+  background: linear-gradient(180deg, #f7f0e4 0%, #efe4d2 100%);
+  color: #2a2418;
+}
+
+.shoulder-banner {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  background: rgba(90, 70, 40, 0.12);
+  border-bottom: 1px solid rgba(90, 70, 40, 0.22);
+  color: #5a4a30;
+}
+
+.shoulder-banner strong {
+  color: #3a3020;
+}
+
+.shoulder-messages {
+  flex: 1 1 auto;
+  min-height: 180px;
+  overflow: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shoulder-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 100%;
+}
+
+.shoulder-msg-role {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a7a60;
+}
+
+.shoulder-msg-user .shoulder-msg-body {
+  align-self: flex-end;
+  background: #3d5a45;
+  color: #f4f0e6;
+  border-radius: 10px 10px 2px 10px;
+  padding: 8px 10px;
+  max-width: 92%;
+}
+
+.shoulder-msg-assistant .shoulder-msg-body,
+.shoulder-msg-system .shoulder-msg-body {
+  align-self: flex-start;
+  background: rgba(255, 252, 245, 0.95);
+  border: 1px solid rgba(90, 70, 40, 0.2);
+  border-radius: 10px 10px 10px 2px;
+  padding: 8px 10px;
+  max-width: 96%;
+}
+
+.shoulder-msg-system .shoulder-msg-body {
+  background: rgba(255, 240, 210, 0.7);
+  font-size: 0.78rem;
+  color: #5a4a30;
+}
+
+.shoulder-msg-body .shoulder-p {
+  margin: 0 0 0.45em;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.shoulder-msg-body .shoulder-p:last-child {
+  margin-bottom: 0;
+}
+
+.shoulder-ul {
+  margin: 0.2em 0 0.45em;
+  padding-left: 1.1em;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.shoulder-quote {
+  margin: 0.35em 0;
+  padding: 6px 8px;
+  border-left: 3px solid #c4a060;
+  background: rgba(196, 160, 96, 0.12);
+  font-size: 0.78rem;
+  color: #4a3c28;
+  line-height: 1.35;
+}
+
+.shoulder-hr {
+  border: none;
+  border-top: 1px dashed rgba(90, 70, 40, 0.28);
+  margin: 0.5em 0;
+}
+
+.shoulder-compose {
+  flex: 0 0 auto;
+  padding: 8px 10px 10px;
+  border-top: 1px solid rgba(90, 70, 40, 0.22);
+  background: rgba(255, 250, 240, 0.85);
+}
+
+.shoulder-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 2.6em;
+  max-height: 7em;
+  border: 1px solid #9a8a70;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.85rem;
+  background: #fffdf8;
+  color: #2a2418;
+}
+
+.shoulder-input:focus {
+  outline: 2px solid rgba(196, 160, 96, 0.55);
+  outline-offset: 1px;
+}
+
+.shoulder-compose-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.shoulder-send {
+  appearance: none;
+  border: 1px solid #6a7a60;
+  background: linear-gradient(180deg, #4a6a50 0%, #355040 100%);
+  color: #f4f0e6;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shoulder-send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.shoulder-send:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+
+.shoulder-settings-toggle {
+  appearance: none;
+  border: 1px solid #9a8a70;
+  background: transparent;
+  color: #5a4a30;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.shoulder-settings-toggle:hover {
+  background: rgba(90, 70, 40, 0.08);
+}
+
+.shoulder-settings {
+  flex: 0 0 auto;
+  padding: 8px 12px 12px;
+  border-top: 1px dashed rgba(90, 70, 40, 0.25);
+  background: rgba(255, 245, 225, 0.9);
+  font-size: 0.75rem;
+  color: #5a4a30;
+}
+
+.shoulder-settings-note {
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.shoulder-settings-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.shoulder-settings-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #9a8a70;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 0.8rem;
+  background: #fffdf8;
+}
+
+.shoulder-settings-actions {
+  margin-top: 8px;
+}
+
+.shoulder-msg-body code {
+  font-size: 0.85em;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0 3px;
+  border-radius: 3px;
+}
