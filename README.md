@@ -2,7 +2,7 @@
 
 Digital square checkerboard game board for Open Kit D&D-style PNG assets.
 
-MVP: **Shoulder** is a private floating chat (per browser client). When **Ollama** is reachable (default model `qwen3-coder:30b`, tools-capable), it answers from the active rules pack and — for DM/solo — calls board tools (`search_assets`, `place_pieces`, etc.) so natural language like “camp and 5 goblins” places real kit assets. The browser talks to `/ollama` → room server → `127.0.0.1:11434` (set `OPENKIT_OLLAMA_URL` to override). If Ollama is off or offline, Shoulder falls back to the extractive local helper + hard-coded place planner. Players get rules Q&A only (no place tools). No paid API.
+MVP: **Shoulder** is a private floating chat (per browser client). When **Ollama** is reachable (default model `qwen3-coder:30b`, tools-capable), it answers from the active rules pack and — for DM/solo — calls board tools (`search_assets`, `place_pieces`, etc.) so natural language like “camp and 5 goblins” places real kit assets. In dev, the browser talks to `/ollama` → Vite proxy → `127.0.0.1:11434` directly (room server still proxies `/ollama` for non-Vite; set `OPENKIT_OLLAMA_URL` to override). If Ollama is off, Shoulder uses the extractive local helper + hard-coded place planner; if an Ollama chat call fails mid-session, it shows a clear error (rules-only Q&A optional) and does **not** place via the hard-coded planner. Players get rules Q&A only (no place tools). No paid API.
 
 ## Quick start
 
@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open the URL Vite prints (usually http://localhost:5173).
+Open `http://localhost:5173` (prefer localhost over `127.0.0.1` if host binding differs). Ollama must be running locally for Shoulder board tools.
 
 Production:
 
@@ -33,13 +33,13 @@ No auth, no DB — rooms live in server memory.
 # Terminal A — room server (port 3001)
 npm run server
 
-# Terminal B — Vite client (proxies /ws, /kit, /ollama → :3001)
+# Terminal B — Vite client (/ws + /kit → :3001; /ollama → 127.0.0.1:11434)
 npm run dev
 ```
 
-Ollama Shoulder needs both processes (same as live kit). Ensure Ollama is running locally with a tools-capable model (default `qwen3-coder:30b`).
+Ollama Shoulder needs Ollama running locally with a tools-capable model (default `qwen3-coder:30b`). Room server is still required for multiplayer / live kit; Vite proxies `/ollama` straight to Ollama in dev.
 
-Open http://localhost:5173 in two browser tabs:
+Open `http://localhost:5173` in two browser tabs:
 
 1. Tab 1: click **Host room** → copy the shareable `?room=CODE&role=dm` URL (or note the code).
 2. Tab 2: enter the room code and **Join** as Player (or open `?room=CODE&role=player`).

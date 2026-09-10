@@ -101,6 +101,7 @@ export function ShoulderChatWindow({
     return saved === null ? true : saved
   })
   const [reach, setReach] = useState<ReachState>('checking')
+  const [probeError, setProbeError] = useState<string | null>(null)
   const [models, setModels] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -123,9 +124,11 @@ export function ShoulderChatWindow({
 
   const probe = useCallback(async (base: string) => {
     setReach('checking')
+    setProbeError(null)
     const result = await probeOllamaTags(base)
     if (result.ok) {
       setReach('ok')
+      setProbeError(null)
       setModels(result.models)
       // Auto-enable when never explicitly disabled and tags reachable
       if (loadShoulderOllamaEnabled() === null) {
@@ -134,6 +137,7 @@ export function ShoulderChatWindow({
     } else {
       setReach('offline')
       setModels([])
+      setProbeError(result.error?.trim() || 'tags probe failed')
     }
     return result
   }, [])
@@ -155,6 +159,7 @@ export function ShoulderChatWindow({
       ? 'Checking Ollama…'
       : 'Local helper (Ollama offline)'
 
+  /** Offline helper when Ollama is intentionally unused — may place via hard-coded planner. */
   const runLocalFallback = useCallback(
     (q: string): string => {
       if (isPlaceIntent(q)) {
@@ -191,6 +196,30 @@ export function ShoulderChatWindow({
       pack,
       pieceContext,
     ],
+  )
+
+  /**
+   * After an Ollama chat failure: never run the hard-coded place planner
+   * (it nonsense-matches words like "pink"). Rules-only Q&A is OK.
+   */
+  const rulesOnlyAfterOllamaFail = useCallback(
+    (q: string): string => {
+      if (isPlaceIntent(q)) {
+        return (
+          'Board place/arrange needs a working Ollama connection — ' +
+          'no local place fallback (avoids nonsense asset matches). ' +
+          'Start Ollama, confirm the banner shows **Ollama**, then retry.'
+        )
+      }
+      const answer = answerFromRulesPack(
+        q,
+        pack?.body ?? '',
+        pack?.title ?? '',
+        pieceContext,
+      )
+      return answer.text
+    },
+    [pack, pieceContext],
   )
 
   const send = useCallback(async () => {
@@ -279,10 +308,12 @@ export function ShoulderChatWindow({
           return
         }
         const message = err instanceof Error ? err.message : String(err)
-        assistantText =
-          `Ollama error (${message}). Falling back to local helper.\n\n` +
-          runLocalFallback(q)
         setReach('offline')
+        setProbeError(message)
+        assistantText =
+          `Ollama error (${message}). Is Ollama running? ` +
+          `Banner should show **Ollama** when reachable — no hard-coded place fallback.\n\n` +
+          rulesOnlyAfterOllamaFail(q)
       }
     } else {
       assistantText = runLocalFallback(q)
@@ -310,6 +341,7 @@ export function ShoulderChatWindow({
     pack,
     pieceContext,
     runLocalFallback,
+    rulesOnlyAfterOllamaFail,
   ])
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -333,7 +365,15 @@ export function ShoulderChatWindow({
 
   return (
     <div className="shoulder-chat">
-      <div className="shoulder-banner" role="status">
+      <div
+        className="shoulder-banner"
+        role="status"
+        title={
+          reach === 'offline' && probeError
+            ? `Ollama probe/chat: ${probeError}`
+            : undefined
+        }
+      >
         <strong>{bannerLabel}</strong>
         <span>
           {packLabel
@@ -342,6 +382,9 @@ export function ShoulderChatWindow({
           {canPlaceFromChat ? ' · place: on (DM/solo)' : ' · place: DM only'}
           {pieceContext?.displayName
             ? ` · piece: ${pieceContext.displayName}`
+            : ''}
+          {reach === 'offline' && probeError
+            ? ` · probe: ${probeError.slice(0, 80)}`
             : ''}
         </span>
       </div>
@@ -431,14 +474,21 @@ export function ShoulderChatWindow({
       {settingsOpen && (
         <div className="shoulder-settings" aria-label="Shoulder settings">
           <p className="shoulder-settings-note">
-            Ollama is proxied through the room server (
-            <code>/ollama</code> → <code>:3001</code> →{' '}
-            <code>127.0.0.1:11434</code>) so the browser stays CORS-safe. Use{' '}
+            In <code>npm run dev</code>, the browser calls <code>/ollama</code>{' '}
+            and Vite proxies it directly to <code>http://127.0.0.1:11434</code>{' '}
+            (CORS-safe; avoids a Node fetch hop). The room server still exposes{' '}
+            <code>/ollama</code> for non-Vite / production. Use{' '}
             <code>/ollama</code> as the base URL — do not point the browser at{' '}
-            <code>http://127.0.0.1:11434</code> directly (CORS). Saved loopback
-            URLs are rewritten to <code>/ollama</code> automatically. Run{' '}
-            <code>npm run server</code> + <code>npm run dev</code>. When Ollama
-            is off or unreachable, Shoulder uses the offline local helper.
+            <code>http://127.0.0.1:11434</code> directly. Prefer opening{' '}
+            <code>http://localhost:5173</code>. Saved loopback URLs rewrite to{' '}
+            <code>/ollama</code>. If chat fails, Shoulder shows an error and
+            rules-only Q&A — it does <em>not</em> hard-code place assets.
+            {probeError ? (
+              <>
+                {' '}
+                Last probe/chat error: <code>{probeError}</code>.
+              </>
+            ) : null}
             {envUrl ? (
               <>
                 {' '}

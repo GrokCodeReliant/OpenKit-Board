@@ -5,6 +5,8 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Listen on IPv4 + IPv6 so both localhost and 127.0.0.1 work
+    host: true,
     proxy: {
       // Multiplayer room WebSocket → npm run server (port 3001)
       '/ws': {
@@ -15,9 +17,11 @@ export default defineConfig({
       '/kit': {
         target: 'http://localhost:3001',
       },
-      // Ollama chat/tags via room server (CORS-safe; env on server)
+      // Browser → Vite → Ollama directly (no Node/undici fetch hop)
       '/ollama': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:11434',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ollama/, ''),
       },
     },
   },

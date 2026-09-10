@@ -1,5 +1,5 @@
 /**
- * Shoulder ↔ Ollama chat + tool loop (via room-server /ollama proxy).
+ * Shoulder ↔ Ollama chat + tool loop (via /ollama proxy — Vite→Ollama in dev).
  */
 
 import type { RulesPack } from './rulesPack'
