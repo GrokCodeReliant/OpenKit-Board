@@ -46,7 +46,7 @@ import {
   markEstablishingShotSeen,
   shouldPlayEstablishingShot,
 } from './establishingShot'
-import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PieceTransform, PlacedPiece } from './types'
+import type { AssetCategory, AssetDef, AssetTheme, HexCoord, LevelBand, PieceUpdatePatch, PlacedPiece } from './types'
 import { DEFAULT_PIECE_TRANSFORM, layerForCategory } from './types'
 import './App.css'
 
@@ -297,6 +297,7 @@ function App() {
           layer,
           category: asset.category,
           ...DEFAULT_PIECE_TRANSFORM,
+          editUnlocked: false,
         }
         return [...next, piece]
       })
@@ -343,7 +344,7 @@ function App() {
   )
 
   const onUpdatePiece = useCallback(
-    (id: string, patch: Partial<PieceTransform>) => {
+    (id: string, patch: PieceUpdatePatch) => {
       const target = pieces.find((p) => p.id === id)
       if (!canControlPiece(room.role, inRoom, room.clientId, target)) return
 

@@ -39,6 +39,7 @@ const RULES_PACK_HARD_LIMIT = 500_000
  *   offsetX?: number,
  *   offsetY?: number,
  *   lockedToCell?: boolean,
+ *   editUnlocked?: boolean,
  * }} Piece
  */
 
@@ -182,6 +183,9 @@ function pickTransform(src) {
   }
   if (typeof src.lockedToCell === 'boolean') {
     out.lockedToCell = src.lockedToCell
+  }
+  if (typeof src.editUnlocked === 'boolean') {
+    out.editUnlocked = src.editUnlocked
   }
   return out
 }
@@ -626,6 +630,7 @@ wss.on('connection', (ws) => {
         offsetX: 0,
         offsetY: 0,
         lockedToCell: true,
+        editUnlocked: false,
         ...pickTransform(msg),
       }
       room.pieces.push(piece)
