@@ -8,11 +8,12 @@ import { createServer, request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { WebSocketServer } from 'ws'
 import { randomBytes } from 'node:crypto'
-import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join, dirname, resolve, basename, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   createMcpHttpHandler,
+  mcpTokenTail,
   resolveMcpToken,
 } from './mcp.mjs'
 import {
@@ -309,31 +310,81 @@ function createRoom() {
 }
 
 
-const DEFAULT_KIT_PATH =
-  'G:\\Game Dev Studio\\projects\\OpenKit\\2d\\dnd\\passed'
+/** Gitignored one-line path: absolute Open Kit `passed/` folder from Settings. */
+const KIT_PATH_FILE = join(ROOT, '.openkit-kit-path')
 
 /**
- * Resolve Open Kit `passed` folder: env, then a few relative fallbacks.
+ * Read optional kit path from local config file (Settings / POST /kit/config).
  * @returns {string | null}
  */
-function resolveKitPath() {
-  const candidates = [
-    process.env.OPENKIT_KIT_PATH,
-    DEFAULT_KIT_PATH,
-    join(ROOT, 'passed'),
-    join(ROOT, '..', 'OpenKit', '2d', 'dnd', 'passed'),
-    join(ROOT, '..', 'passed'),
-  ].filter(Boolean)
+function readKitPathFile() {
+  try {
+    if (!existsSync(KIT_PATH_FILE)) return null
+    const line = readFileSync(KIT_PATH_FILE, 'utf8').trim().split(/\r?\n/)[0]?.trim()
+    return line || null
+  } catch {
+    return null
+  }
+}
 
-  for (const cand of candidates) {
+/**
+ * @param {string | null} pathValue empty/null clears the file
+ * @returns {{ ok: true, kitPath: string | null } | { ok: false, error: string }}
+ */
+function writeKitPathFile(pathValue) {
+  const trimmed = (pathValue || '').trim()
+  try {
+    if (!trimmed) {
+      if (existsSync(KIT_PATH_FILE)) {
+        writeFileSync(KIT_PATH_FILE, '', { encoding: 'utf8' })
+      }
+      return { ok: true, kitPath: null }
+    }
+    const abs = resolve(trimmed)
+    if (!existsSync(abs) || !statSync(abs).isDirectory()) {
+      return { ok: false, error: 'Folder not found — pick your Open Kit passed/ directory' }
+    }
+    writeFileSync(KIT_PATH_FILE, abs + '\n', { encoding: 'utf8', mode: 0o600 })
+    return { ok: true, kitPath: abs }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: message }
+  }
+}
+
+/**
+ * Resolve Open Kit `passed` folder: env, then Settings file, then relative fallbacks.
+ * No machine-specific defaults. Demo pack is used by the client when this returns null.
+ * @returns {{ path: string, source: 'env' | 'file' | 'fallback' } | null}
+ */
+function resolveKitPathInfo() {
+  /** @type {{ cand: string, source: 'env' | 'file' | 'fallback' }[]} */
+  const candidates = []
+  const fromEnv = (process.env.OPENKIT_KIT_PATH || '').trim()
+  if (fromEnv) candidates.push({ cand: fromEnv, source: 'env' })
+  const fromFile = readKitPathFile()
+  if (fromFile) candidates.push({ cand: fromFile, source: 'file' })
+  candidates.push(
+    { cand: join(ROOT, 'passed'), source: 'fallback' },
+    { cand: join(ROOT, '..', 'passed'), source: 'fallback' },
+  )
+
+  for (const { cand, source } of candidates) {
     try {
       const abs = resolve(cand)
-      if (existsSync(abs) && statSync(abs).isDirectory()) return abs
+      if (existsSync(abs) && statSync(abs).isDirectory()) {
+        return { path: abs, source }
+      }
     } catch {
       /* skip */
     }
   }
   return null
+}
+
+/** @returns {string | null} */
+function resolveKitPath() {
+  return resolveKitPathInfo()?.path ?? null
 }
 
 function categoryFromFilename(filename) {
@@ -481,6 +532,22 @@ const mcpHttpHandler = createMcpHttpHandler({
   nextPieceId: () => `p${nextPieceSeq++}`,
 })
 
+
+/** Host is localhost / loopback — Vite Settings path. Tunnel hostnames are not local. */
+function isLocalBoardHost(req) {
+  // Host only — cloudflared also connects from 127.0.0.1, so remoteAddress is not safe.
+  const raw = String(req.headers.host || '').split(',')[0].trim().toLowerCase()
+  let host = raw
+  if (host.startsWith('[')) {
+    const end = host.indexOf(']')
+    host = end >= 0 ? host.slice(1, end) : host.replace(/^\[|\]$/g, '')
+  } else {
+    // Strip :port without breaking IPv4 (127.0.0.1:3001)
+    host = host.replace(/:\d+$/, '')
+  }
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+}
+
 const httpServer = createServer((req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
   const pathname = url.pathname
@@ -501,6 +568,51 @@ const httpServer = createServer((req, res) => {
         res.end(JSON.stringify({ error: 'Not found' }))
       }
     })
+    return
+  }
+
+  // --- Local MCP token for Settings (Vite proxy). Tunnel Host requires Bearer. ---
+  if (pathname === '/mcp/token' && (req.method === 'GET' || req.method === 'HEAD')) {
+    const expected = (process.env.OPENKIT_MCP_TOKEN || '').trim()
+    const local = isLocalBoardHost(req)
+    if (!local) {
+      if (!checkMcpAuth(req.headers.authorization, expected)) {
+        const origin = getPublicOrigin(req)
+        res.writeHead(401, {
+          ...jsonHeaders,
+          'WWW-Authenticate': mcpWwwAuthenticate(origin),
+          'Access-Control-Allow-Origin': '*',
+        })
+        res.end(
+          JSON.stringify({
+            error: 'Unauthorized',
+            hint: 'GET /mcp/token is for local Settings (localhost). Via tunnel, send Authorization: Bearer <board MCP token>.',
+          }),
+        )
+        return
+      }
+    }
+    if (!expected) {
+      res.writeHead(503, jsonHeaders)
+      res.end(JSON.stringify({ error: 'MCP token unavailable' }))
+      return
+    }
+    res.writeHead(200, {
+      ...jsonHeaders,
+      // Same-origin / Vite only in practice; allow local fetch
+      'Access-Control-Allow-Origin': local ? (req.headers.origin || '*') : '*',
+    })
+    if (req.method === 'HEAD') {
+      res.end()
+      return
+    }
+    res.end(
+      JSON.stringify({
+        token: expected,
+        source: mcpTokenInfo.source,
+        hint: 'Stable across restarts when saved in .mcp-token. Paste into Grok only when connecting/approving — not every play session. Tunnel URL is separate and may change.',
+      }),
+    )
     return
   }
 
@@ -539,16 +651,84 @@ const httpServer = createServer((req, res) => {
   }
 
   if (pathname === '/health') {
-    const kitPath = resolveKitPath()
     res.writeHead(200, jsonHeaders)
+    const kitInfo = resolveKitPathInfo()
     res.end(
       JSON.stringify({
         ok: true,
         rooms: rooms.size,
-        kitPath: kitPath,
-        kitAvailable: Boolean(kitPath),
+        kitPath: kitInfo?.path ?? null,
+        kitAvailable: Boolean(kitInfo),
+        kitSource: kitInfo?.source ?? null,
       }),
     )
+    return
+  }
+
+
+  // --- Kit path config (Settings). Localhost only for read/write of absolute path. ---
+  if (pathname === '/kit/config' && req.method === 'GET') {
+    if (!isLocalBoardHost(req)) {
+      res.writeHead(401, jsonHeaders)
+      res.end(JSON.stringify({ error: 'Local only — set kit path from the board on localhost' }))
+      return
+    }
+    const kitInfo = resolveKitPathInfo()
+    const saved = readKitPathFile()
+    res.writeHead(200, jsonHeaders)
+    res.end(
+      JSON.stringify({
+        kitPath: kitInfo?.path ?? null,
+        kitAvailable: Boolean(kitInfo),
+        source: kitInfo?.source ?? null,
+        savedPath: saved,
+        envSet: Boolean((process.env.OPENKIT_KIT_PATH || '').trim()),
+        hint: 'Point at your Open Kit passed/ folder. Env OPENKIT_KIT_PATH overrides the saved path.',
+      }),
+    )
+    return
+  }
+
+  if (pathname === '/kit/config' && req.method === 'POST') {
+    if (!isLocalBoardHost(req)) {
+      res.writeHead(401, jsonHeaders)
+      res.end(JSON.stringify({ error: 'Local only — set kit path from the board on localhost' }))
+      return
+    }
+    const chunks = []
+    req.on('data', (c) => chunks.push(c))
+    req.on('end', () => {
+      let body = {}
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
+      } catch {
+        res.writeHead(400, jsonHeaders)
+        res.end(JSON.stringify({ error: 'Invalid JSON' }))
+        return
+      }
+      const pathValue = body && typeof body.path === 'string' ? body.path : ''
+      const written = writeKitPathFile(pathValue)
+      if (!written.ok) {
+        res.writeHead(400, jsonHeaders)
+        res.end(JSON.stringify({ error: written.error }))
+        return
+      }
+      const kitInfo = resolveKitPathInfo()
+      res.writeHead(200, jsonHeaders)
+      res.end(
+        JSON.stringify({
+          ok: true,
+          kitPath: kitInfo?.path ?? null,
+          kitAvailable: Boolean(kitInfo),
+          source: kitInfo?.source ?? null,
+          savedPath: readKitPathFile(),
+          envSet: Boolean((process.env.OPENKIT_KIT_PATH || '').trim()),
+          note: (process.env.OPENKIT_KIT_PATH || '').trim()
+            ? 'Saved file updated, but OPENKIT_KIT_PATH env still wins until you unset it.'
+            : undefined,
+        }),
+      )
+    })
     return
   }
 
@@ -559,8 +739,7 @@ const httpServer = createServer((req, res) => {
       res.end(
         JSON.stringify({
           error: 'Open Kit path not found',
-          hint: 'Set OPENKIT_KIT_PATH to your passed/ folder',
-          triedDefault: DEFAULT_KIT_PATH,
+          hint: 'Set kit folder in Shoulder Settings, or set OPENKIT_KIT_PATH to your passed/ folder',
         }),
       )
       return
@@ -1117,29 +1296,37 @@ wss.on('connection', (ws) => {
 
 httpServer.listen(PORT, () => {
   const hasDist = existsSync(DIST)
-  const kitPath = resolveKitPath()
   console.log(`[openkit-board] room server on ws://localhost:${PORT}`)
   console.log(`[openkit-board] health http://localhost:${PORT}/health`)
   console.log(`[openkit-board] kit manifest http://localhost:${PORT}/kit/manifest`)
   console.log(`[openkit-board] MCP Streamable HTTP http://localhost:${PORT}/mcp (Bearer OPENKIT_MCP_TOKEN or OAuth)`)
   console.log(`[openkit-board] OAuth AS http://localhost:${PORT}/.well-known/oauth-authorization-server (client_id=${FALLBACK_CLIENT_ID})`)
-  if (mcpTokenInfo.generated) {
-    console.log(`[openkit-board] OPENKIT_MCP_TOKEN was unset — generated for this process:`)
-    console.log(`[openkit-board]   export OPENKIT_MCP_TOKEN='${mcpTokenInfo.token}'`)
-  } else {
-    console.log(`[openkit-board] OPENKIT_MCP_TOKEN: set (${mcpTokenInfo.token.length} chars)`)
+  {
+    const tail = mcpTokenTail(mcpTokenInfo.token)
+    const len = mcpTokenInfo.token.length
+    if (mcpTokenInfo.source === 'minted') {
+      console.log(`[openkit-board] MCP token minted + saved to .mcp-token (…${tail}, ${len} chars)`)
+    } else if (mcpTokenInfo.source === 'file') {
+      console.log(`[openkit-board] MCP token loaded from .mcp-token (…${tail}, ${len} chars)`)
+    } else {
+      console.log(`[openkit-board] OPENKIT_MCP_TOKEN set from env (…${tail}, ${len} chars)`)
+    }
+    console.log(`[openkit-board] copy token from board Settings (Grok connector) or GET /mcp/token on localhost`)
   }
   if (mcpActiveRoomCode) {
     console.log(`[openkit-board] OPENKIT_MCP_ROOM default: ${mcpActiveRoomCode}`)
   }
   console.log(`[openkit-board] ollama proxy http://localhost:${PORT}/ollama/api/tags → ${process.env.OPENKIT_OLLAMA_URL || 'http://127.0.0.1:11434'}`)
   console.log(`[openkit-board] xai proxy http://localhost:${PORT}/xai/v1/chat/completions → https://api.x.ai/v1 (env key: ${process.env.XAI_API_KEY || process.env.GROK_API_KEY ? 'set' : 'unset'})`)
-  if (kitPath) {
-    console.log(`[openkit-board] Open Kit path: ${kitPath}`)
-  } else {
-    console.log(
-      `[openkit-board] Open Kit path not found — set OPENKIT_KIT_PATH (default: ${DEFAULT_KIT_PATH})`,
-    )
+  {
+    const kitInfo = resolveKitPathInfo()
+    if (kitInfo) {
+      console.log(`[openkit-board] Open Kit path (${kitInfo.source}): ${kitInfo.path}`)
+    } else {
+      console.log(
+        '[openkit-board] Open Kit path not found — set in Shoulder Settings or OPENKIT_KIT_PATH (demo pack used until then)',
+      )
+    }
   }
   if (hasDist) {
     console.log(`[openkit-board] note: dist/ present (static serve not wired in MVP)`)

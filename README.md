@@ -82,9 +82,11 @@ Piece sheets for MCP live on the **piece** (room state), not only in the browser
 
 ### Run (token + room server)
 
+**Stable token vs changing tunnel URL:** the board MCP token is meant to stay the same across `npm run server` restarts. The Cloudflare/ngrok HTTPS URL changes more often. Connect once per tunnel URL; you only need to paste the token again when adding/reconnecting the connector (OAuth Approve), not every play session.
+
 ```bash
-# Generate a secret once and keep it out of git
-export OPENKIT_MCP_TOKEN="$(openssl rand -base64 32)"
+# Optional: set a secret yourself (otherwise the server loads/mints .mcp-token)
+# export OPENKIT_MCP_TOKEN="$(openssl rand -base64 32)"
 # Optional default room (or use set_active_room after Host)
 # export OPENKIT_MCP_ROOM=ABC12
 # Point at your Open Kit passed/ folder if needed
@@ -93,7 +95,9 @@ export OPENKIT_MCP_TOKEN="$(openssl rand -base64 32)"
 npm run server
 ```
 
-If `OPENKIT_MCP_TOKEN` is unset, the server **mints one for this process** and prints `export OPENKIT_MCP_TOKEN='…'` once — copy it for the connector. Never commit tokens.
+If `OPENKIT_MCP_TOKEN` is unset, the server loads gitignored **`.mcp-token`** in the project root, or mints one once and writes that file. Logs only show the last 4 characters — never the full token. **Copy the token from the board:** AI panel → Shoulder → **Settings** → **Grok connector (MCP)** (Show / Copy), or AI → Setup. Do not hunt `.mcp-token` in Notepad for normal use. Never commit `.mcp-token` or put the raw token in the client bundle.
+
+Local-only helper: `GET http://localhost:3001/mcp/token` (also via Vite proxy `/mcp/token`). Host must be localhost; via the public tunnel this endpoint requires Bearer auth.
 
 MCP endpoint: `http://localhost:3001/mcp`  
 Auth: `Authorization: Bearer <OPENKIT_MCP_TOKEN>` **or** a token from the OAuth consent flow (Grok Connect).
@@ -113,8 +117,8 @@ Copy the HTTPS URL (e.g. `https://….trycloudflare.com`).
 
 Grok Connect expects **OAuth**, not a pasted Bearer secret. This board server hosts a tiny OAuth 2.1 flow on the same port (PKCE + consent page). Static `Authorization: Bearer <OPENKIT_MCP_TOKEN>` still works for curl / local tools.
 
-1. Keep `npm run server` running with `OPENKIT_MCP_TOKEN` set (or copy the generated token from the server log / `.mcp-token`).
-2. Expose it with a tunnel (`cloudflared tunnel --url http://localhost:3001`).
+1. Keep `npm run server` running. Copy the board MCP token from **Shoulder → Settings** (or AI → Setup). Token persists in `.mcp-token` across restarts.
+2. Expose it with a tunnel (`cloudflared tunnel --url http://localhost:3001`). Tunnel URL may change; reconnect the connector when it does.
 3. Open [grok.com/connectors](https://grok.com/connectors) → **New** → **Custom**.
 4. MCP URL: `https://<tunnel-host>/mcp`
 5. When Grok asks for OAuth fields, discovery should fill them from:
@@ -210,7 +214,7 @@ the title bar; multiple sheets can be open at once.
 - **Rules pack:** Paste/upload .txt/.md/.pdf + rights checkbox (private folio; no required license field); PDF → text client-side; solo localStorage; DM syncs room pack to players (read-only)
 - **Piece sheet / pin library:** Select piece → index-card notes + freeform stats; pin by assetId in localStorage; **Pinned** floating window list/edit/place (local only, no WS)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
-- **Assets:** live Open Kit `passed/` via room server (`OPENKIT_KIT_PATH`), else curated demo pack (~18) under `public/assets/demo/`
+- **Assets:** live Open Kit `passed/` via room server (Settings kit path or `OPENKIT_KIT_PATH`), else curated demo pack under `public/assets/`
 - **AI:** small sidebar **AI** button opens a floating panel (Shoulder chat, local Ollama setup, Grok connector setup, copy-paste grok.com prompts)
 - Square checkerboard grid (`q`,`r` = column/row) with pan + scroll zoom (top-down); zoom-out fits the whole map
 - **Assets** floating window: categories (Tiles | Props | Tokens | Monsters), theme/level filters, name search, thumbnail palette
@@ -231,29 +235,27 @@ hell magma/grate + altar + imp/legionnaire; extraplanar dream mist/door/dreamwal
 ## Open Kit live assets (auto-load)
 
 The room server can **scan your Open Kit `passed/` folder** and serve PNGs live —
-new Ink drops show up after **Refresh** in the Assets window (no hand-edited mega-manifest,
-and the ~963 binaries are **not** committed to git).
+new assets show up after **Refresh** in the Assets window (binaries stay on your machine; they are **not** committed to git).
 
-Default kit path (Windows):
+Point the app at *your* kit folder:
 
-`G:\Game Dev Studio\projects\OpenKit\2d\dnd\passed`
-
-Override with env `OPENKIT_KIT_PATH` if yours differs.
+1. **Shoulder → Settings → Open Kit folder** — paste the absolute path to your `passed/` directory and Save (stored in gitignored `.openkit-kit-path`), or
+2. Set env `OPENKIT_KIT_PATH` before `npm run server` (overrides the saved path).
 
 ```bash
 # Terminal A — room server (also serves /kit/manifest + /kit/files/*)
-# Optional: setx OPENKIT_KIT_PATH "D:\path\to\passed"
+# Optional: export OPENKIT_KIT_PATH="/path/to/your/OpenKit/passed"
 npm run server
 
 # Terminal B — Vite (proxies /kit → :3001)
 npm run dev
 ```
 
-- With server + kit path: Assets shows **Open Kit live (N)** (~963 including goblins).
+- With server + a valid kit path: Assets shows **Open Kit live (N)**.
 - Without server/kit: Assets falls back to the curated **Demo pack** under `public/assets/`.
 - Soft **Refresh** in the Assets tray re-fetches the manifest (picks up new PNGs).
 
-Endpoints: `GET /kit/manifest`, `GET /kit/files/:file` (path-safe). Categories follow
+Endpoints: `GET /kit/manifest`, `GET /kit/files/:file` (path-safe), local `GET|POST /kit/config` for Settings. Categories follow
 filename prefixes (`tile-` / `prop-` / `token-` / `monster-`); theme tags are heuristic
 from name keywords (fae, hell, heaven, dream/void, else fantasy).
 

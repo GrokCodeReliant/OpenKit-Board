@@ -6,9 +6,14 @@
  * Room: OPENKIT_MCP_ROOM env, or list_rooms / set_active_room tools.
  */
 import { randomBytes } from 'node:crypto'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server'
 import { toNodeHandler } from '@modelcontextprotocol/node'
 import * as z from 'zod/v4'
+
+const MCP_TOKEN_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', '.mcp-token')
 
 const MAX_PLACE_PER_CALL = 30
 const MAX_SEARCH_RESULTS = 12
@@ -323,16 +328,50 @@ function textResult(obj) {
 }
 
 /**
- * Resolve or mint OPENKIT_MCP_TOKEN for this process.
- * Never logs the full token when it came from env; logs generated tokens once.
- * @returns {{ token: string, generated: boolean }}
+ * Last 4 chars for safe log lines — never print the full token in normal logs.
+ * @param {string} token
+ */
+export function mcpTokenTail(token) {
+  const t = (token || '').trim()
+  if (t.length < 4) return '????'
+  return t.slice(-4)
+}
+
+/**
+ * Resolve OPENKIT_MCP_TOKEN for this process:
+ * 1) env if set
+ * 2) else load from .mcp-token (project root, gitignored)
+ * 3) else mint once, write .mcp-token, use that
+ * Never logs the full token.
+ * @returns {{ token: string, generated: boolean, source: 'env' | 'file' | 'minted' }}
  */
 export function resolveMcpToken() {
   const fromEnv = (process.env.OPENKIT_MCP_TOKEN || '').trim()
-  if (fromEnv) return { token: fromEnv, generated: false }
+  if (fromEnv) return { token: fromEnv, generated: false, source: 'env' }
+
+  try {
+    if (existsSync(MCP_TOKEN_FILE)) {
+      const fromFile = readFileSync(MCP_TOKEN_FILE, 'utf8').trim()
+      if (fromFile) {
+        process.env.OPENKIT_MCP_TOKEN = fromFile
+        return { token: fromFile, generated: false, source: 'file' }
+      }
+    }
+  } catch {
+    /* fall through to mint */
+  }
+
   const token = randomBytes(24).toString('base64url')
   process.env.OPENKIT_MCP_TOKEN = token
-  return { token, generated: true }
+  try {
+    writeFileSync(MCP_TOKEN_FILE, `${token}\n`, { encoding: 'utf8', mode: 0o600 })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.warn(
+      '[openkit-board] could not write .mcp-token (' + message + ') — token is process-only until the file is writable',
+    )
+  }
+  return { token, generated: true, source: 'minted' }
 }
 
 /**

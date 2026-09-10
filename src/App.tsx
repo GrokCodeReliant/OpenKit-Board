@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { loadAssetsPreferKit, type AssetLoadSource } from './assets'
+import { KIT_CONFIG_CHANGED_EVENT } from './components/KitPathSettingsSection'
 import { HexBoard } from './components/HexBoard'
 import { RoomPanel } from './components/RoomPanel'
 import { PresenceToggle } from './components/PresenceToggle'
@@ -224,6 +225,14 @@ function App() {
 
   useEffect(() => {
     refreshAssets()
+  }, [refreshAssets])
+
+  useEffect(() => {
+    const onKit = () => {
+      refreshAssets()
+    }
+    window.addEventListener(KIT_CONFIG_CHANGED_EVENT, onKit)
+    return () => window.removeEventListener(KIT_CONFIG_CHANGED_EVENT, onKit)
   }, [refreshAssets])
 
   // Drop pieces outside the map when radius shrinks (solo only; server handles room)
