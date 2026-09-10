@@ -2,7 +2,7 @@
  * Streamable HTTP MCP at /mcp for Grok custom connectors.
  * Mutates the same in-memory rooms the WebSocket clients use, then broadcasts.
  *
- * Auth: Authorization: Bearer <OPENKIT_MCP_TOKEN>
+ * Auth: Authorization: Bearer <OPENKIT_MCP_TOKEN> (or OAuth access token from server/oauth.mjs)
  * Room: OPENKIT_MCP_ROOM env, or list_rooms / set_active_room tools.
  */
 import { randomBytes } from 'node:crypto'

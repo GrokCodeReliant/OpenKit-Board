@@ -89,7 +89,7 @@ npm run server
 If `OPENKIT_MCP_TOKEN` is unset, the server **mints one for this process** and prints `export OPENKIT_MCP_TOKEN='…'` once — copy it for the connector. Never commit tokens.
 
 MCP endpoint: `http://localhost:3001/mcp`  
-Auth: `Authorization: Bearer <OPENKIT_MCP_TOKEN>`
+Auth: `Authorization: Bearer <OPENKIT_MCP_TOKEN>` **or** a token from the OAuth consent flow (Grok Connect).
 
 ### Tunnel (Cloudflare or ngrok)
 
@@ -102,12 +102,22 @@ cloudflared tunnel --url http://localhost:3001
 
 Copy the HTTPS URL (e.g. `https://….trycloudflare.com`).
 
-### Add the connector on Grok
+### Add the connector on Grok (OAuth)
 
-1. Open [grok.com/connectors](https://grok.com/connectors) → **New** → **Custom**.
-2. URL: `https://<tunnel-host>/mcp`
-3. Auth: Bearer token = the same `OPENKIT_MCP_TOKEN`.
-4. Save / enable the connector.
+Grok Connect expects **OAuth**, not a pasted Bearer secret. This board server hosts a tiny OAuth 2.1 flow on the same port (PKCE + consent page). Static `Authorization: Bearer <OPENKIT_MCP_TOKEN>` still works for curl / local tools.
+
+1. Keep `npm run server` running with `OPENKIT_MCP_TOKEN` set (or copy the generated token from the server log / `.mcp-token`).
+2. Expose it with a tunnel (`cloudflared tunnel --url http://localhost:3001`).
+3. Open [grok.com/connectors](https://grok.com/connectors) → **New** → **Custom**.
+4. MCP URL: `https://<tunnel-host>/mcp`
+5. When Grok asks for OAuth fields, discovery should fill them from:
+   - `/.well-known/oauth-protected-resource`
+   - `/.well-known/oauth-authorization-server`
+6. If you must enter a client id by hand, use the built-in public client: **`openkit-board`** (auth method **none** — no client secret). Dynamic registration at `/oauth/register` is also supported.
+7. Complete Connect — your browser opens this board’s **Approve Grok connector** page on the tunnel host. Paste the same board MCP token and click **Approve**.
+8. Grok redirects to `https://grok.com/connectors-oauth-exchange-code/` with a one-time code; the connector then uses the issued access token for `/mcp`.
+
+OAuth endpoints (same origin as MCP): `/oauth/authorize`, `/oauth/token`, `/oauth/register`, plus the `.well-known` docs above.
 
 ### Host a room first (required)
 

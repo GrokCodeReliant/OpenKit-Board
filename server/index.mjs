@@ -12,10 +12,16 @@ import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname, resolve, basename, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  checkBearer,
   createMcpHttpHandler,
   resolveMcpToken,
 } from './mcp.mjs'
+import {
+  checkMcpAuth,
+  getPublicOrigin,
+  handleOAuthHttp,
+  mcpWwwAuthenticate,
+  FALLBACK_CLIENT_ID,
+} from './oauth.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
@@ -441,6 +447,19 @@ const httpServer = createServer((req, res) => {
     'Cache-Control': 'no-store',
   }
 
+  // --- OAuth 2.1 + protected-resource discovery (Grok Connect) ---
+  if (pathname.startsWith('/.well-known/') || pathname.startsWith('/oauth/')) {
+    void handleOAuthHttp(req, res, url, {
+      getMcpToken: () => (process.env.OPENKIT_MCP_TOKEN || '').trim(),
+    }).then((handled) => {
+      if (!handled && !res.headersSent) {
+        res.writeHead(404, jsonHeaders)
+        res.end(JSON.stringify({ error: 'Not found' }))
+      }
+    })
+    return
+  }
+
   // --- MCP Streamable HTTP (Grok custom connectors) ---
   if (pathname === '/mcp' || pathname.startsWith('/mcp/')) {
     if (req.method === 'OPTIONS') {
@@ -454,16 +473,17 @@ const httpServer = createServer((req, res) => {
       return
     }
     const expected = (process.env.OPENKIT_MCP_TOKEN || '').trim()
-    if (!checkBearer(req.headers.authorization, expected)) {
+    if (!checkMcpAuth(req.headers.authorization, expected)) {
+      const origin = getPublicOrigin(req)
       res.writeHead(401, {
         ...jsonHeaders,
-        'WWW-Authenticate': 'Bearer realm="openkit-mcp"',
+        'WWW-Authenticate': mcpWwwAuthenticate(origin),
         'Access-Control-Allow-Origin': '*',
       })
       res.end(
         JSON.stringify({
           error: 'Unauthorized',
-          hint: 'Set Authorization: Bearer <OPENKIT_MCP_TOKEN>',
+          hint: 'Use Authorization: Bearer <OPENKIT_MCP_TOKEN> or complete Grok OAuth consent',
         }),
       )
       return
@@ -1057,7 +1077,8 @@ httpServer.listen(PORT, () => {
   console.log(`[openkit-board] room server on ws://localhost:${PORT}`)
   console.log(`[openkit-board] health http://localhost:${PORT}/health`)
   console.log(`[openkit-board] kit manifest http://localhost:${PORT}/kit/manifest`)
-  console.log(`[openkit-board] MCP Streamable HTTP http://localhost:${PORT}/mcp (Bearer OPENKIT_MCP_TOKEN)`)
+  console.log(`[openkit-board] MCP Streamable HTTP http://localhost:${PORT}/mcp (Bearer OPENKIT_MCP_TOKEN or OAuth)`)
+  console.log(`[openkit-board] OAuth AS http://localhost:${PORT}/.well-known/oauth-authorization-server (client_id=${FALLBACK_CLIENT_ID})`)
   if (mcpTokenInfo.generated) {
     console.log(`[openkit-board] OPENKIT_MCP_TOKEN was unset — generated for this process:`)
     console.log(`[openkit-board]   export OPENKIT_MCP_TOKEN='${mcpTokenInfo.token}'`)
