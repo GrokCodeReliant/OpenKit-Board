@@ -10,7 +10,11 @@ import {
   shoulderToolDefs,
   type ShoulderToolContext,
 } from './shoulderTools'
-import { DEFAULT_OLLAMA_BASE, DEFAULT_OLLAMA_MODEL } from './shoulderSettings'
+import {
+  DEFAULT_OLLAMA_BASE,
+  DEFAULT_OLLAMA_MODEL,
+  normalizeOllamaBaseUrl,
+} from './shoulderSettings'
 
 const MAX_ROUNDS = 6
 const RULES_PROMPT_CHARS = 16_000
@@ -35,8 +39,37 @@ export interface OllamaChatResponse {
 }
 
 function normalizeBase(base: string): string {
-  const t = (base || DEFAULT_OLLAMA_BASE).trim().replace(/\/$/, '')
-  return t || DEFAULT_OLLAMA_BASE
+  return normalizeOllamaBaseUrl(base || DEFAULT_OLLAMA_BASE)
+}
+
+const PROBE_TIMEOUT_MS = 9_000
+
+function formatOllamaHttpError(status: number, errText: string): string {
+  let error = ''
+  let detail = ''
+  try {
+    const j = JSON.parse(errText) as { error?: string; detail?: string }
+    error = (j.error || '').trim()
+    detail = (j.detail || '').trim()
+  } catch {
+    /* keep raw */
+  }
+  if (error && detail && detail !== error) return `${error}: ${detail}`
+  if (error) return error
+  if (detail) return detail
+  const raw = errText.trim()
+  return raw || `Ollama HTTP ${status}`
+}
+
+function isTransientOllamaFailure(status: number, message: string): boolean {
+  if (status === 502 || status === 503 || status === 504) return true
+  const m = message.toLowerCase()
+  return (
+    m.includes('upstream unreachable') ||
+    m.includes('failed to fetch') ||
+    m.includes('networkerror') ||
+    m.includes('load failed')
+  )
 }
 
 export async function probeOllamaTags(
@@ -47,7 +80,7 @@ export async function probeOllamaTags(
   try {
     const res = await fetch(`${base}/api/tags`, {
       method: 'GET',
-      signal: signal ?? AbortSignal.timeout(4000),
+      signal: signal ?? AbortSignal.timeout(PROBE_TIMEOUT_MS),
     })
     if (!res.ok) {
       const text = await res.text().catch(() => '')
@@ -190,32 +223,59 @@ export async function runShoulderOllamaChat(
     rulesTitle: opts.pack?.title ?? '',
   }
 
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const res = await fetch(`${base}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages,
-        tools,
-        stream: false,
-        // Keep thinking models quieter when supported
-        think: false,
-      }),
-      signal: opts.signal ?? AbortSignal.timeout(120_000),
-    })
+  /** One chat POST with a single retry on 502 / unreachable / network fail. */
+  async function postChat(): Promise<Response> {
+    const doFetch = () =>
+      fetch(`${base}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages,
+          tools,
+          stream: false,
+          // Keep thinking models quieter when supported
+          think: false,
+        }),
+        signal: opts.signal ?? AbortSignal.timeout(120_000),
+      })
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '')
-      let detail = errText
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let res: Response
       try {
-        const j = JSON.parse(errText) as { error?: string; detail?: string }
-        detail = j.error || j.detail || errText
-      } catch {
-        /* keep */
+        res = await doFetch()
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (
+          attempt === 0 &&
+          !opts.signal?.aborted &&
+          isTransientOllamaFailure(0, message)
+        ) {
+          await new Promise((r) => setTimeout(r, 400))
+          continue
+        }
+        throw err
       }
-      throw new Error(detail || `Ollama HTTP ${res.status}`)
+
+      if (res.ok) return res
+
+      const errText = await res.text().catch(() => '')
+      const detail = formatOllamaHttpError(res.status, errText)
+      if (
+        attempt === 0 &&
+        !opts.signal?.aborted &&
+        isTransientOllamaFailure(res.status, detail)
+      ) {
+        await new Promise((r) => setTimeout(r, 400))
+        continue
+      }
+      throw new Error(detail)
     }
+    throw new Error('Ollama chat failed after retry')
+  }
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const res = await postChat()
 
     const data = (await res.json()) as OllamaChatResponse
     if (data.error) throw new Error(data.error)

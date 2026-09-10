@@ -32,6 +32,7 @@ import {
   saveShoulderOllamaEnabled,
   saveShoulderOllamaModel,
   saveShoulderOllamaUrl,
+  normalizeOllamaBaseUrl,
 } from '../shoulderSettings'
 import { probeOllamaTags, runShoulderOllamaChat } from '../shoulderOllama'
 import type { ShoulderToolContext } from '../shoulderTools'
@@ -319,7 +320,7 @@ export function ShoulderChatWindow({
   }
 
   const onSaveSettings = () => {
-    const url = ollamaUrl.trim() || DEFAULT_OLLAMA_BASE
+    const url = normalizeOllamaBaseUrl(ollamaUrl.trim() || DEFAULT_OLLAMA_BASE)
     const model = ollamaModel.trim() || DEFAULT_OLLAMA_MODEL
     setOllamaUrl(url)
     setOllamaModel(model)
@@ -432,7 +433,10 @@ export function ShoulderChatWindow({
           <p className="shoulder-settings-note">
             Ollama is proxied through the room server (
             <code>/ollama</code> → <code>:3001</code> →{' '}
-            <code>127.0.0.1:11434</code>) so the browser stays CORS-safe. Run{' '}
+            <code>127.0.0.1:11434</code>) so the browser stays CORS-safe. Use{' '}
+            <code>/ollama</code> as the base URL — do not point the browser at{' '}
+            <code>http://127.0.0.1:11434</code> directly (CORS). Saved loopback
+            URLs are rewritten to <code>/ollama</code> automatically. Run{' '}
             <code>npm run server</code> + <code>npm run dev</code>. When Ollama
             is off or unreachable, Shoulder uses the offline local helper.
             {envUrl ? (

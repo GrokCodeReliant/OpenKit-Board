@@ -518,18 +518,40 @@ const httpServer = createServer((req, res) => {
     req.on('end', async () => {
       const bodyBuf = Buffer.concat(chunks)
       const target = `${OLLAMA_UPSTREAM}${upstreamPath}${url.search || ''}`
-      try {
-        /** @type {Record<string, string>} */
-        const headers = { Accept: 'application/json' }
-        if (req.method === 'POST') {
-          headers['Content-Type'] = req.headers['content-type'] || 'application/json'
+      /** @type {Record<string, string>} */
+      const headers = { Accept: 'application/json' }
+      if (req.method === 'POST') {
+        headers['Content-Type'] = req.headers['content-type'] || 'application/json'
+      }
+      const fetchOpts = {
+        method: req.method === 'HEAD' ? 'GET' : req.method,
+        headers,
+        body: req.method === 'POST' ? bodyBuf : undefined,
+        signal: AbortSignal.timeout(120_000),
+      }
+
+      /**
+       * @param {number} attempt
+       * @returns {Promise<Response>}
+       */
+      async function fetchUpstream(attempt) {
+        try {
+          return await fetch(target, fetchOpts)
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          if (attempt === 0) {
+            console.warn(
+              `[openkit-board] ollama proxy fetch failed (retrying once): ${message} → ${target}`,
+            )
+            await new Promise((r) => setTimeout(r, 400))
+            return fetchUpstream(1)
+          }
+          throw err
         }
-        const upstream = await fetch(target, {
-          method: req.method === 'HEAD' ? 'GET' : req.method,
-          headers,
-          body: req.method === 'POST' ? bodyBuf : undefined,
-          signal: AbortSignal.timeout(120_000),
-        })
+      }
+
+      try {
+        const upstream = await fetchUpstream(0)
         const outHeaders = {
           'Content-Type': upstream.headers.get('content-type') || 'application/json',
           'Cache-Control': 'no-store',
@@ -543,12 +565,16 @@ const httpServer = createServer((req, res) => {
         res.end(buf)
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
+        console.error(
+          `[openkit-board] ollama proxy upstream unreachable: ${message} → ${target}`,
+        )
         res.writeHead(502, jsonHeaders)
         res.end(
           JSON.stringify({
             error: 'Ollama upstream unreachable',
             detail: message,
             upstream: OLLAMA_UPSTREAM,
+            target,
             hint: 'Start Ollama locally, or set OPENKIT_OLLAMA_URL',
           }),
         )
