@@ -198,7 +198,6 @@ function normalizeRulesPack(pack) {
     typeof p.id !== 'string' ||
     typeof p.title !== 'string' ||
     typeof p.body !== 'string' ||
-    typeof p.license !== 'string' ||
     (p.format !== 'text' && p.format !== 'markdown')
   ) {
     return false
@@ -216,7 +215,10 @@ function normalizeRulesPack(pack) {
     title: p.title,
     body,
     format: p.format,
-    license: p.license,
+    license:
+      typeof p.license === 'string' && p.license.trim()
+        ? p.license
+        : 'private session',
     sourceUrl: typeof p.sourceUrl === 'string' ? p.sourceUrl : undefined,
     attribution: typeof p.attribution === 'string' ? p.attribution : undefined,
     rightsAffirmedAt:

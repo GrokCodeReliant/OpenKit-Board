@@ -10,16 +10,10 @@ import {
 } from '../rulesPack'
 
 const RIGHTS_LABEL =
-  'I affirm that I have the right to use this text in this private session (I wrote it, I own it, or its license allows my use). Open Kit Board will not redistribute this pack for me.'
+  'I affirm I have the right to use this text in my private session (I wrote it, I own it, or its license allows my use).'
 
 /** Link-only sample — never vendor pack body in the repo. */
 const SAMPLE_HELP_URL = 'https://johnharper.itch.io/lasers-feelings'
-
-const LICENSE_CHIPS = [
-  'CC BY 4.0',
-  'Public domain',
-  'Personal / house rules',
-] as const
 
 interface RulesPackPanelProps {
   pack: RulesPack | null
@@ -40,9 +34,8 @@ function saveBlockedReason(opts: {
   busy: boolean
   rightsOk: boolean
   body: string
-  license: string
 }): string | null {
-  const { busy, rightsOk, body, license } = opts
+  const { busy, rightsOk, body } = opts
   if (busy) {
     // Extract in progress (no body yet). During save the button label is enough.
     if (!body.trim()) return 'Waiting for PDF text…'
@@ -51,9 +44,6 @@ function saveBlockedReason(opts: {
   if (!body.trim()) return 'Body is empty — paste or upload rules text.'
   if (body.length > BODY_HARD_LIMIT) {
     return `Text too long (max ${BODY_HARD_LIMIT.toLocaleString()} characters). Shorten it.`
-  }
-  if (!license.trim()) {
-    return 'Add a license (e.g. CC BY 4.0) — tap a chip below or type one.'
   }
   if (!rightsOk) return 'Check the rights affirmation to continue.'
   return null
@@ -71,7 +61,6 @@ export function RulesPackPanel({
 }: RulesPackPanelProps) {
   const [importing, setImporting] = useState(false)
   const [title, setTitle] = useState('')
-  const [license, setLicense] = useState('')
   const [body, setBody] = useState('')
   const [sourceUrl, setSourceUrl] = useState('')
   const [attribution, setAttribution] = useState('')
@@ -79,20 +68,16 @@ export function RulesPackPanel({
   const [formatHint, setFormatHint] = useState<'text' | 'markdown'>('text')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  /** Soft hint after a successful extract when license is still blank. */
-  const [suggestCcBy, setSuggestCcBy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const resetForm = () => {
     setTitle('')
-    setLicense('')
     setBody('')
     setSourceUrl('')
     setAttribution('')
     setRightsOk(false)
     setFormatHint('text')
     setError(null)
-    setSuggestCcBy(false)
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -100,23 +85,14 @@ export function RulesPackPanel({
     if (readOnly) return
     if (replace && pack) {
       setTitle(pack.title)
-      setLicense(pack.license)
       setBody('')
       setSourceUrl(pack.sourceUrl ?? '')
       setAttribution(pack.attribution ?? '')
-      setSuggestCcBy(false)
     } else {
       resetForm()
     }
     setRightsOk(false)
     setImporting(true)
-  }
-
-  const afterExtractOk = (text: string) => {
-    // Soft-suggest only — never invent a license without a click.
-    if (!license.trim() && text.trim()) {
-      setSuggestCcBy(true)
-    }
   }
 
   const onFile = async (file: File | null) => {
@@ -150,7 +126,6 @@ export function RulesPackPanel({
         setBody(text)
         setFormatHint('text')
         if (!title.trim()) setTitle(titleFromFilename(file.name))
-        afterExtractOk(text)
       } catch (e) {
         const msg =
           e instanceof Error
@@ -190,7 +165,6 @@ export function RulesPackPanel({
       setBody(text)
       setFormatHint(inferFormat(file.name, text))
       if (!title.trim()) setTitle(titleFromFilename(file.name))
-      afterExtractOk(text)
     } catch (e) {
       setError(
         e instanceof Error
@@ -204,12 +178,11 @@ export function RulesPackPanel({
   const canSave =
     rightsOk &&
     body.trim().length > 0 &&
-    license.trim().length > 0 &&
     body.length <= BODY_HARD_LIMIT &&
     !busy
 
   const blockedReason = !canSave
-    ? saveBlockedReason({ busy, rightsOk, body, license })
+    ? saveBlockedReason({ busy, rightsOk, body })
     : null
 
   const onSave = async () => {
@@ -220,7 +193,8 @@ export function RulesPackPanel({
       const packNext = await createRulesPack({
         title: title.trim() || 'Untitled rules pack',
         body,
-        license: license.trim(),
+        // Optional on the model; import UX no longer collects a license.
+        license: 'private session',
         format: inferFormat(undefined, body) === 'markdown' ? 'markdown' : formatHint,
         sourceUrl: sourceUrl.trim() || undefined,
         attribution: attribution.trim() || undefined,
@@ -238,18 +212,15 @@ export function RulesPackPanel({
     }
   }
 
-  const licensePlaceholder = suggestCcBy
-    ? 'Suggested: CC BY 4.0 — tap a chip or type your own'
-    : 'CC BY 4.0, Public domain, Personal / house rules…'
-
   if (importing && !readOnly) {
     const softWarn = body.length >= BODY_SOFT_LIMIT
     return (
       <div className="rules-panel">
         <p className="rules-label">Slip in a rules folio</p>
         <p className="rules-empty">
-          Paste or upload rules you own or wrote. Open Kit does not ship
-          rulebooks.
+          Private folio for this session. Paste or upload text you have the
+          right to use — you are responsible for what you import. Open Kit does
+          not ship rulebooks and does not republish your packs.
         </p>
         <label className="rules-field">
           <span>Title</span>
@@ -261,54 +232,6 @@ export function RulesPackPanel({
             aria-label="Rules pack title"
           />
         </label>
-        <div className="rules-field">
-          <span>License (required)</span>
-          <input
-            type="text"
-            value={license}
-            onChange={(e) => {
-              setLicense(e.target.value)
-              if (e.target.value.trim()) setSuggestCcBy(false)
-            }}
-            placeholder={licensePlaceholder}
-            aria-label="License"
-          />
-          <div className="rules-license-chips" role="group" aria-label="Quick license">
-            {LICENSE_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                className={
-                  license.trim() === chip
-                    ? 'rules-chip rules-chip-active'
-                    : 'rules-chip'
-                }
-                onClick={() => {
-                  setLicense(chip)
-                  setSuggestCcBy(false)
-                }}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-          {suggestCcBy && !license.trim() && (
-            <p className="rules-hint">
-              Text loaded. Many indie one-pagers use{' '}
-              <button
-                type="button"
-                className="rules-hint-link"
-                onClick={() => {
-                  setLicense('CC BY 4.0')
-                  setSuggestCcBy(false)
-                }}
-              >
-                CC BY 4.0
-              </button>
-              — tap a chip only if that matches your rights (no silent default).
-            </p>
-          )}
-        </div>
         <label className="rules-field">
           <span>Body — paste or upload .txt / .md / .pdf</span>
           <textarea
@@ -359,13 +282,13 @@ export function RulesPackPanel({
           />
         </label>
         <label className="rules-field">
-          <span>Attribution (optional)</span>
+          <span>Note / credit (optional)</span>
           <input
             type="text"
             value={attribution}
             onChange={(e) => setAttribution(e.target.value)}
-            placeholder="Author credit"
-            aria-label="Attribution"
+            placeholder="Author credit or private note"
+            aria-label="Note or credit"
           />
         </label>
         <label className="rules-check">
@@ -377,9 +300,9 @@ export function RulesPackPanel({
           <span>{RIGHTS_LABEL}</span>
         </label>
         <p className="rules-disclaimer">
-          Open Kit Board is rules-agnostic. You are responsible for the legality
-          of text you import. We store it for your session; we do not republish
-          your packs.
+          This is your private folio for the table. You are responsible for what
+          you import. We store it for your session; we do not republish your
+          packs.
         </p>
         {error && <p className="rules-error">{error}</p>}
         <div className="rules-actions">
@@ -427,15 +350,16 @@ export function RulesPackPanel({
         ) : (
           <>
             <p className="rules-empty">
-              Paste or upload rules you own or wrote. Open Kit does not ship
-              rulebooks.
+              Private folio for this session. Paste or upload text you have the
+              right to use — you are responsible for what you import. Open Kit
+              does not ship rulebooks and does not republish your packs.
             </p>
             <p className="rules-sample">
               Testing tip (link only):{' '}
               <a href={SAMPLE_HELP_URL} target="_blank" rel="noreferrer">
                 Lasers &amp; Feelings
               </a>{' '}
-              (CC BY 4.0) — copy text yourself; do not commit it here.
+              — copy text yourself; do not commit it here.
             </p>
             <button
               type="button"
@@ -461,12 +385,14 @@ export function RulesPackPanel({
       </p>
       <div className="rules-active-head">
         <strong className="rules-title">{pack.title}</strong>
-        <span className="rules-license" title={pack.license}>
-          {pack.license}
-        </span>
+        {pack.license.trim() && (
+          <span className="rules-license" title={pack.license}>
+            {pack.license}
+          </span>
+        )}
       </div>
       {pack.attribution && (
-        <p className="rules-meta">Attribution: {pack.attribution}</p>
+        <p className="rules-meta">Note / credit: {pack.attribution}</p>
       )}
       <p className="rules-meta">
         {pack.body.length.toLocaleString()} chars · {pack.format}

@@ -54,9 +54,9 @@ Optional: set `VITE_WS_URL` (e.g. `ws://localhost:3001`) to bypass the Vite prox
 Import **your own** rules text for the session — paste or upload `.txt` / `.md` / `.pdf` (PDF text is extracted in the browser; binary PDF is never synced).
 Open Kit Board does **not** ship rulebooks or sample pack bodies in the repo.
 
-- Fields: title, license (free text), body, required rights acknowledgment
+- Fields: title, body, optional note/credit, required rights acknowledgment (license stays on the data model as optional `"private session"` — not collected in import UX)
 - Solo: active pack in browser `localStorage` (works offline)
-- Sidebar **Rules folio** panel for all roles (title, license, attribution)
+- Sidebar **Rules folio** panel for all roles (title, optional license badge, note/credit)
 - **Open folio** opens a floating draggable window with the full scrollable pack body
 - Multiplayer: DM attaches/replaces/clears the room pack; it syncs over WebSocket; players are read-only
 - Late joiners receive the current room pack in `joined` / `state`
@@ -109,7 +109,7 @@ the title bar; multiple sheets can be open at once.
 
 - **Presence:** table well + room/dim/void backdrop + material piece tray + top-down framing + foley/ambience + establishing arrival + decorative seat pads + selected contact shadow
 - **Multiplayer rooms:** Host/Join with short code; DM + players sync mapRadius + pieces over WebSocket
-- **Rules pack:** Paste/upload .txt/.md/.pdf + license + rights checkbox; PDF → text client-side; solo localStorage; DM syncs room pack to players (read-only)
+- **Rules pack:** Paste/upload .txt/.md/.pdf + rights checkbox (private folio; no required license field); PDF → text client-side; solo localStorage; DM syncs room pack to players (read-only)
 - **Piece sheet / pin library:** Select piece → index-card notes + freeform stats; pin by assetId in localStorage; **Pinned** floating window list/edit/place (local only, no WS)
 - **DM filters:** theme (Fantasy / Fae / Heaven / Hell / Extraplanar) + level band + category tabs + name search
 - **Demo pack:** ~18 real Open Kit PNGs under `public/assets/demo/` (infrastructure smoke-test — no baked story, no AI)
