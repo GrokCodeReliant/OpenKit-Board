@@ -83,10 +83,12 @@ export function McpTokenCopySection({ compact = false }: { compact?: boolean }) 
     <section className="mcp-token-block" aria-label="Grok connector MCP token">
       <h3 className="shoulder-settings-label">Grok connector (MCP)</h3>
       <p className="shoulder-settings-note">
+        For the <strong>grok.com</strong> MCP connector only (not the Shoulder xAI key).
         This board token stays stable across server restarts (saved in{' '}
         <code>.mcp-token</code>). Paste it into Grok only when adding or reconnecting
-        the connector (OAuth Approve). The Cloudflare/ngrok tunnel URL is separate and
-        may change — connect once per tunnel URL.
+        the connector (OAuth Approve). Tunnel to <code>:3001</code> — the Cloudflare/ngrok
+        URL is separate and may change; connect once per tunnel URL. See{' '}
+        <code>docs/MCP.md</code>.
       </p>
       {loading ? (
         <p className="shoulder-settings-note">Loading token from room server…</p>

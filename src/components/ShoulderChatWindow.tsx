@@ -101,7 +101,7 @@ export function ShoulderChatWindow({
       id: newId(),
       role: 'system',
       text:
-        'Shoulder — rules Q&A + DM board tools. Choose Ollama (local) or Grok xAI in Settings. Tool calling places kit assets for DM/solo; falls back to the offline local helper when the selected provider is unavailable.',
+        'Shoulder — in-board rules Q&A + DM board tools (Ollama or an xAI API key in Settings). This is separate from the grok.com MCP connector (subscription + board MCP token). Falls back to the offline local helper when the selected provider is unavailable.',
     },
   ])
   const [draft, setDraft] = useState('')
@@ -199,7 +199,7 @@ export function ShoulderChatWindow({
         setXaiModels([])
         setXaiProbeError(
           result.error?.trim() ||
-            'No xAI key in settings and server env key missing/unreachable',
+            'Shoulder xAI key missing (settings + server env) — grok.com MCP still separate',
         )
       }
       return result
@@ -238,7 +238,7 @@ export function ShoulderChatWindow({
       : provider === 'xai'
         ? xaiReach === 'checking'
           ? 'Checking Grok…'
-          : 'Grok (key missing / offline)'
+          : 'Grok (Shoulder key offline — MCP unaffected)'
         : reach === 'checking' && ollamaEnabled
           ? 'Checking Ollama…'
           : 'Local helper (Ollama offline)'
@@ -290,9 +290,9 @@ export function ShoulderChatWindow({
     (q: string): string => {
       if (isPlaceIntent(q)) {
         return (
-          'Board place/arrange needs a working LLM connection (Ollama or Grok) — ' +
+          'Board place/arrange in Shoulder needs a working Ollama or xAI connection — ' +
           'no local place fallback (avoids nonsense asset matches). ' +
-          'Confirm the banner shows **Ollama** or **Grok**, then retry.'
+          'Confirm the banner shows **Ollama** or **Grok · …**, or use the grok.com MCP connector instead.'
         )
       }
       const answer = answerFromRulesPack(
@@ -611,9 +611,11 @@ export function ShoulderChatWindow({
           aria-label="Shoulder settings"
         >
           <p className="shoulder-settings-note">
-            <strong>Ollama</strong> (local) or <strong>Grok</strong> (xAI). Grok key stays in{' '}
-            <code>localStorage</code> — or set <code>XAI_API_KEY</code> on the server. Ollama
-            proxies to <code>127.0.0.1:11434</code>.
+            <strong>Ollama</strong> (local) or <strong>Grok</strong> (xAI API key) power{' '}
+            <em>this</em> Shoulder chat only. The xAI key is not your grok.com subscription —
+            that path is the MCP connector below. Grok key stays in <code>localStorage</code>{' '}
+            — or set <code>XAI_API_KEY</code> on the server. Ollama proxies to{' '}
+            <code>127.0.0.1:11434</code>.
             {provider === 'xai' && xaiProbeError ? (
               <>
                 {' '}

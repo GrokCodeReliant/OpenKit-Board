@@ -168,9 +168,9 @@ export function AiPanel({
               </li>
             </ol>
             <p className="ai-note">
-              Shoulder talks to Ollama in this browser. xAI API keys stay under
-              Shoulder Settings if you already use that path — not required for
-              this panel.
+              Shoulder talks to Ollama (or an optional xAI API key) in this browser.
+              That is separate from the grok.com MCP connector below — a missing
+              Shoulder key does not block the subscription connector.
             </p>
           </SetupSection>
 
@@ -207,9 +207,10 @@ export function AiPanel({
               </li>
             </ol>
             <p className="ai-note ai-note-em">
-              Subscription Grok lives in that separate grok.com tab and drives
-              the board through the connector. Board <strong>Shoulder</strong>{' '}
-              does <em>not</em> use the subscription connector.
+              Subscription Grok lives in a separate grok.com tab and drives the
+              board through this connector (<code>OPENKIT_MCP_TOKEN</code> + OAuth).
+              Board <strong>Shoulder</strong> is a different path (Ollama / xAI key)
+              and does <em>not</em> use the subscription connector.
             </p>
           </SetupSection>
         </div>
